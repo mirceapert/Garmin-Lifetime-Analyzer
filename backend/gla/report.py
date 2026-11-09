@@ -44,7 +44,7 @@ def last_runs(s: Session, limit: int = 5) -> list[dict]:
 
 
 SPORT_LABELS = {"run": "Running", "trail": "Trail running", "walk": "Walking", "tennis": "Tennis",
-                "snow": "Snowboarding", "other": "Other"}
+                "snow": "Snowboarding", "cycle": "Cycling", "sail": "Sailing", "other": "Other"}
 
 
 HEALTH_LABELS = {"sleep_score": "sleep score", "sleep_s": "sleep time", "hrv_night_ms": "night HRV", "resting_hr": "resting HR"}

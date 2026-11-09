@@ -102,6 +102,18 @@ def _cmd_worker(args) -> int:
     return 0
 
 
+def _cmd_regroup(args) -> int:
+    from .sports import regroup_activities
+    settings = load_settings()
+    sessions = session_factory(make_engine(settings))
+    with sessions() as s:
+        moved = regroup_activities(s)
+        s.commit()
+        print(f"{moved} activities moved to a different sport group.\n")
+        print(format_summary(library_summary(s)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="fitparse")
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -122,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     pst.set_defaults(func=_cmd_status)
     pw = sub.add_parser("worker", help="run the daily sync schedule (used by the worker container)")
     pw.set_defaults(func=_cmd_worker)
+    prg = sub.add_parser("regroup", help="re-apply the sport groups to all stored activities")
+    prg.set_defaults(func=_cmd_regroup)
     args = p.parse_args(argv)
     return args.func(args)
 

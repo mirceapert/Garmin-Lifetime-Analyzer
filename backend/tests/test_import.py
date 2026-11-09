@@ -80,3 +80,15 @@ def test_corrupt_fit_is_reported_not_fatal(settings, sessions, tmp_path):
     report = ExportImporter(settings, sessions).run(folder)
     assert report["this_run"]["files_failed"] == 1
     assert report["failures"][0]["file"] == "broken.fit"
+
+
+def test_regroup_moves_old_other_activities(settings, sessions, export_zip):
+    from gla.sports import regroup_activities
+    ExportImporter(settings, sessions).run(export_zip)
+    with sessions() as s:
+        a = s.scalar(select(Activity).where(Activity.garmin_id == 1004))
+        a.garmin_sport, a.sport = "cycling", "other"     # as stored before cycling had its own group
+        s.commit()
+        assert regroup_activities(s) == 1
+        s.commit()
+        assert s.scalar(select(Activity).where(Activity.garmin_id == 1004)).sport == "cycle"

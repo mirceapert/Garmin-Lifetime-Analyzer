@@ -23,7 +23,7 @@ from .garmin_api import GarminSource, KeyMissing, KeyRejected, fit_files_in
 from .importer.garmin_json import first, to_utc, wellness_from_obj
 from .ingest import find_raw, now, store_raw, upsert_fit_activity, upsert_health, upsert_summary_activity
 from .models import Activity, Setting, SyncRun
-from .sports import normalize_sport
+from .sports import normalize_sport, regroup_activities
 
 log = logging.getLogger(__name__)
 PAGE = 100
@@ -141,6 +141,7 @@ class ApiSync:
                     self._health(s, source, since, until, counts)
                     self._hr_profile(s, source, counts)
                     set_setting(s, "api_synced_through", until.isoformat())
+                    counts["activities_regrouped"] += regroup_activities(s)
                     report = {"window": [since.isoformat(), until.isoformat()], **dict(counts)}
                     s.commit()
                 except Exception:

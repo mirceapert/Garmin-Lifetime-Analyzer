@@ -19,6 +19,7 @@ from ..db import backup_database
 from ..fit_reader import NotAnActivity, read_fit
 from ..ingest import find_raw, now, store_raw, upsert_fit_activity, upsert_health, upsert_summary_activity
 from ..models import Activity, Setting, SyncRun
+from ..sports import regroup_activities
 from . import garmin_json
 from .sources import ExportEntry, iter_export
 
@@ -59,6 +60,7 @@ class ExportImporter:
                 self._apply_summaries(s)
                 self._apply_wellness(s)
                 self._remember_newest(s)
+                self.counts["activities_regrouped"] += regroup_activities(s)
                 s.commit()
                 report = self._report(s, path, backup)
             status, error = "ok", None
