@@ -162,10 +162,10 @@ def training_load(s: Session, today: date) -> dict:
 
 def tracks(s: Session) -> list[dict]:
     rows = s.execute(select(Activity.id, Activity.sport, Activity.start_utc, Activity.tz_offset_min, Track.polyline,
-                            Track.min_lat, Track.min_lon, Track.max_lat, Track.max_lon)
+                            Track.min_lat, Track.min_lon, Track.max_lat, Track.max_lon, Activity.name)
                      .join(Track, Track.activity_id == Activity.id).order_by(Activity.start_utc)).all()
     return [{"id": r[0], "sport": r[1], "date": (r[2] + timedelta(minutes=r[3] or 0)).date().isoformat(),
-             "polyline": r[4], "bbox": [r[5], r[6], r[7], r[8]]} for r in rows]
+             "polyline": r[4], "bbox": [r[5], r[6], r[7], r[8]], "name": r[9]} for r in rows]
 
 
 def health_days(s: Session) -> list[list]:

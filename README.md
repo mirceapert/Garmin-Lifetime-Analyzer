@@ -4,7 +4,7 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Status: milestone 3 of 6, analytics.** The app imports your full Garmin account export once, keeps itself up to date from the Garmin Personal API every day, and computes training load, best efforts, explorer tiles and repeated routes. The web views come in the next milestones.
+**Status: milestone 4 of 6, first views.** The app imports your Garmin history, keeps itself up to date every day, and shows it in your browser: lifetime totals, the heatmap with explorer tiles, your repeated routes and your best efforts. Tennis, snowboarding, sleep and forecasts come in milestone 5.
 
 ## What you need
 
@@ -118,6 +118,25 @@ The key is used only from your computer. The app exchanges it for a 24-hour acce
 
 Warnings appear in `gla status` (and later in the app's header) from 7 days before the key expires, when Garmin rejects the key, and when the last sync failed. To replace the key, create a new one in Garmin Connect, update both lines in `.env`, then run `docker compose up -d` again.
 
+## Using the app
+
+```powershell
+docker compose up -d --build
+```
+
+Then open **http://localhost:8000** in your browser. The app is reachable only from this computer.
+
+| Tab | What's on it |
+| --- | --- |
+| Lifetime | Odometer, totals per sport, and year over year with year toggles your browser remembers |
+| Heatmap & tiles | Every GPS track on a map, sport layers, explorer tiles and your largest square, shortcuts to the places you're active |
+| Routes | Routes you repeat, how your pace changed on each, and a name you choose |
+| Best efforts | Fastest 1 km, 5 km, 10 km and half marathon, and how each record moved over time |
+
+The header shows when the last sync ran and has a **Sync now** button. API key warnings appear under it from 7 days before the key expires. Every tab has its own link (for example `http://localhost:8000/#routes-25`), so you can bookmark a route.
+
+The base map comes from CARTO, built on OpenStreetMap data, so the map tab needs an internet connection. Nothing about you is sent with those requests apart from which map squares you look at.
+
 ## Analytics
 
 After every import and sync the app analyzes new activities on its own. To run it by hand:
@@ -148,6 +167,15 @@ The results are in the API, ready for the views in milestone 4 (open http://loca
 | `PATCH /api/routes/{id}` | Rename a route, body `{"name": "Bega loop"}` |
 | `GET /api/training-load` | Daily load, fitness, fatigue and form |
 | `GET /api/health-days` | Sleep score, sleep time, night HRV and resting heart rate per day |
+
+## What to check (milestone 4 review)
+
+- http://localhost:8000 opens, and still reads well when you make the browser window narrow (phone width).
+- Lifetime: the totals match the earlier `gla report`, and the year toggles stay as you left them after a reload.
+- Heatmap: your tracks sit on the right streets; the place shortcuts make sense; sport layers turn on and off.
+- Routes: rename a route, reload the page, the name is still there.
+- Best efforts: the half marathon best is the Timisoara City Marathon half.
+- Sync now runs and the time in the header updates.
 
 ## What to check (milestone 3 review)
 
@@ -194,6 +222,10 @@ The full report is saved at `data\import-report.json`. It holds counts, dates an
 cd backend
 pip install -e ".[dev]"
 pytest
+
+cd ../frontend
+npm install
+npm run dev      # http://localhost:5173, with /api sent to the app on :8000
 ```
 
 The tests build a small fake Garmin export (FIT files, activity summaries and wellness files) and a fake Personal API that answers in the real API's shapes. GitHub runs them on every push.
@@ -204,7 +236,7 @@ The full requirements and design are in the project's design doc. Milestones:
 
 1. Foundation and import
 2. Live sync from the Garmin Personal API
-3. Analytics on real data (this one)
-4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts
+3. Analytics on real data
+4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts (this one)
 5. Tennis, Snowboard, Sleep and recovery, Forecasts
 6. Year in Review, setup guide and hosting checklist

@@ -140,3 +140,15 @@ def get_health_days() -> list[list]:
     """[day, sleep score, sleep seconds, night HRV, resting HR] per day."""
     with sessions() as s:
         return q.health_days(s)
+
+
+# ------------------------------------------------------------------ the web app (milestone 4)
+import os as _os  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+WEB_DIR = _Path(_os.environ.get("GLA_WEB_DIR", _Path(__file__).resolve().parents[2] / "frontend" / "dist"))
+if (WEB_DIR / "index.html").exists():
+    # mounted last, so every /api route above wins
+    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

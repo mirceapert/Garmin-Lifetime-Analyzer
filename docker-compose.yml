@@ -1,6 +1,6 @@
 services:
   app:
-    build: ./backend
+    build: .
     image: garmin-lifetime-analyzer:latest
     # Reachable only from this computer. Hosting later adds a reverse proxy with HTTPS and a login.
     ports:
@@ -15,7 +15,7 @@ services:
 
   # Runs the Garmin sync once a day at GLA_SYNC_TIME, retrying a failed run up to three times.
   worker:
-    build: ./backend
+    build: .
     image: garmin-lifetime-analyzer:latest
     command: ["gla", "worker"]
     volumes:
