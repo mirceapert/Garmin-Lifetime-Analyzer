@@ -16,7 +16,11 @@ def test_normalize_sport():
     assert normalize_sport("snowboarding") == "snow"
     assert normalize_sport("resort_snowboarding") == "snow"
     assert normalize_sport("hiking") == "walk"
-    assert normalize_sport("cycling") == "other"
+    assert normalize_sport("cycling") == "cycle"
+    assert normalize_sport("cycling", "indoor_cycling") == "cycle"
+    assert normalize_sport("mountain_biking") == "cycle"
+    assert normalize_sport("sailing") == "sail"
+    assert normalize_sport("swimming", "lap_swimming") == "other"
     assert normalize_sport(None) == "other"
 
 
