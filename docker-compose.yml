@@ -1,0 +1,14 @@
+services:
+  app:
+    build: ./backend
+    image: garmin-lifetime-analyzer:latest
+    # Reachable only from this computer. Hosting later adds a reverse proxy with HTTPS and a login.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
+      - ./import:/import:ro
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
