@@ -52,3 +52,91 @@ def sync_now() -> dict:
 
     threading.Thread(target=work, name=f"sync-{run_id}", daemon=True).start()
     return {"run_id": run_id, "status": "started"}
+
+
+# ------------------------------------------------------------------ analytics (milestone 3)
+from datetime import datetime as _dt  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from pydantic import BaseModel  # noqa: E402
+
+from .analytics import queries as q  # noqa: E402
+from .models import Route  # noqa: E402
+
+FOOT_SPORTS = ["run", "trail", "walk"]
+
+
+@app.get("/api/lifetime")
+def get_lifetime() -> dict:
+    """Odometer and totals per sport."""
+    with sessions() as s:
+        return q.lifetime(s)
+
+
+@app.get("/api/year-over-year")
+def get_yoy(sports: str = "run,trail") -> dict:
+    """Cumulative distance by day of year, one series per year. `sports` is a comma-separated list."""
+    with sessions() as s:
+        return q.year_over_year(s, [x for x in sports.split(",") if x])
+
+
+@app.get("/api/best-efforts")
+def get_best_efforts() -> dict:
+    with sessions() as s:
+        return q.best_efforts(s)
+
+
+@app.get("/api/tiles")
+def get_tiles() -> dict:
+    with sessions() as s:
+        return q.tiles(s)
+
+
+@app.get("/api/tracks")
+def get_tracks() -> list[dict]:
+    """Every GPS track (simplified, encoded polyline) for the heatmap."""
+    with sessions() as s:
+        return q.tracks(s)
+
+
+@app.get("/api/routes")
+def get_routes(min_efforts: int = 3) -> list[dict]:
+    with sessions() as s:
+        return q.routes(s, min_efforts)
+
+
+@app.get("/api/routes/{route_id}")
+def get_route(route_id: int) -> dict:
+    with sessions() as s:
+        r = q.route_detail(s, route_id)
+    if r is None:
+        raise HTTPException(404, "No such route")
+    return r
+
+
+class RouteName(BaseModel):
+    name: str | None
+
+
+@app.patch("/api/routes/{route_id}")
+def rename_route(route_id: int, body: RouteName) -> dict:
+    with sessions() as s:
+        r = s.get(Route, route_id)
+        if r is None:
+            raise HTTPException(404, "No such route")
+        r.name = (body.name or "").strip()[:80] or None
+        s.commit()
+        return {"id": r.id, "name": r.name}
+
+
+@app.get("/api/training-load")
+def get_training_load() -> dict:
+    with sessions() as s:
+        return q.training_load(s, _dt.now(ZoneInfo(settings.timezone)).date())
+
+
+@app.get("/api/health-days")
+def get_health_days() -> list[list]:
+    """[day, sleep score, sleep seconds, night HRV, resting HR] per day."""
+    with sessions() as s:
+        return q.health_days(s)

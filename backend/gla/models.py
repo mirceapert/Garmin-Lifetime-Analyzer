@@ -116,3 +116,48 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+class DerivedMetric(Base):
+    """A number computed from an activity (training load, best efforts). Rebuildable from raw data."""
+    __tablename__ = "derived_metrics"
+    __table_args__ = (UniqueConstraint("activity_id", "metric", name="uq_metric"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activities.id"), index=True)
+    metric: Mapped[str] = mapped_column(String(32), index=True)    # load, best_1k, best_5k, best_10k, best_hm
+    value: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String(16))                # version of the method that produced it
+
+
+class Route(Base):
+    """A route you repeat. Detected automatically; the name is yours to change and survives re-analysis."""
+    __tablename__ = "routes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group: Mapped[str] = mapped_column(String(16))                # run (incl. trail), walk, cycle
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    length_m: Mapped[float] = mapped_column(Float)
+    loop: Mapped[bool] = mapped_column(Boolean)
+    signature: Mapped[list] = mapped_column(JSON)                 # 24 points along the first effort
+    shape: Mapped[str] = mapped_column(Text)                      # encoded polyline of the first effort
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class RouteMember(Base):
+    __tablename__ = "route_members"
+
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activities.id"), primary_key=True)
+    route_id: Mapped[int] = mapped_column(ForeignKey("routes.id"), index=True)
+    match_m: Mapped[float] = mapped_column(Float)                 # mean distance to the route signature
+
+
+class Tile(Base):
+    """A zoom-14 map tile you have been in, with the first visit."""
+    __tablename__ = "tiles"
+
+    x: Mapped[int] = mapped_column(Integer, primary_key=True)
+    y: Mapped[int] = mapped_column(Integer, primary_key=True)
+    first_day: Mapped[date] = mapped_column(Date)
+    first_activity_id: Mapped[int] = mapped_column(Integer)
+    visits: Mapped[int] = mapped_column(Integer)
