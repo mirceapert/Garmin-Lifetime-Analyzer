@@ -141,11 +141,32 @@ def is_wellness_file(name: str) -> bool:
     return n.endswith(".json") and any(h in n for h in WELLNESS_HINTS) and not is_summary_file(name)
 
 
+def day_dicts(obj: Any, inherited: dict | None = None):
+    """Yield every dict that carries a calendarDate, wherever it sits in the response.
+    Scalar fields of the enclosing objects are passed down (the API puts avgOvernightHrv
+    next to dailySleepDTO rather than inside it)."""
+    if isinstance(obj, dict):
+        if "calendarDate" in obj:
+            yield {**(inherited or {}), **obj}
+            return
+        scalars = {k: v for k, v in obj.items() if not isinstance(v, (dict, list))}
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                yield from day_dicts(v, {**(inherited or {}), **scalars})
+    elif isinstance(obj, list):
+        for x in obj:
+            yield from day_dicts(x, inherited)
+
+
 def parse_wellness(data: bytes) -> dict[date, dict]:
+    return wellness_from_obj(load_json(data))
+
+
+def wellness_from_obj(obj: Any) -> dict[date, dict]:
     """Return {day: {field: value}} for the fields found. Fields: sleep_score, sleep_start_utc,
     sleep_end_utc, sleep_s, hrv_night_ms, resting_hr. `day` is Garmin's calendarDate (the wake-up day for sleep)."""
     days: dict[date, dict] = {}
-    for r in records(load_json(data)):
+    for r in day_dicts(obj):
         day = to_day(r.get("calendarDate"))
         if day is None:
             continue

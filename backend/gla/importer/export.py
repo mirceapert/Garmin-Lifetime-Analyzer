@@ -5,11 +5,9 @@ and activities are matched by start time and sport, so nothing is duplicated.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import traceback
 from collections import Counter
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -17,24 +15,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import Settings
-from ..db import backup_database, copy_raw
-from ..fit_reader import FitActivity, NotAnActivity, read_fit
-from ..geo import encode_polyline, thin_by_distance
-from ..models import Activity, DailyHealth, RawFile, Setting, SyncRun, Track
+from ..db import backup_database
+from ..fit_reader import NotAnActivity, read_fit
+from ..ingest import find_raw, now, store_raw, upsert_fit_activity, upsert_health, upsert_summary_activity
+from ..models import Activity, Setting, SyncRun
 from . import garmin_json
 from .sources import ExportEntry, iter_export
 
 log = logging.getLogger(__name__)
-MATCH_WINDOW = timedelta(seconds=90)
 COMMIT_EVERY = 50
-
-
-def dedup_key(start_utc: datetime, sport: str) -> str:
-    return f"{start_utc:%Y%m%dT%H%M%S}-{sport}"
-
-
-def now() -> datetime:
-    return datetime.now().replace(microsecond=0)
 
 
 class ExportImporter:
@@ -112,16 +101,10 @@ class ExportImporter:
             self.failures.append({"file": e.name, "error": f"{type(exc).__name__}: {exc}"})
 
     def _handle_fit(self, s: Session, e: ExportEntry) -> None:
-        sha = hashlib.sha256(e.data).hexdigest()
-        existing = s.scalar(select(RawFile).where(RawFile.sha256 == sha))
-        if existing is not None:
+        if find_raw(s, e.data) is not None:
             self.counts["fit_already_imported"] += 1
             return
-        stored = self.settings.raw_dir / "fit" / sha[:2] / f"{sha}.fit"
-        copy_raw(e.data, stored)
-        raw = RawFile(sha256=sha, source="export", kind="fit", original_name=e.name, stored_path=str(stored),
-                      size_bytes=len(e.data), received_at=now())
-        s.add(raw)
+        raw = store_raw(s, self.settings, e.data, source="export", kind="fit", name=e.name)
         try:
             act = read_fit(e.data)
         except NotAnActivity as exc:
@@ -132,92 +115,29 @@ class ExportImporter:
             raw.status, raw.note = "failed", f"{type(exc).__name__}: {exc}"
             self._fail(e, exc)
             return
-        s.flush()
-        self._upsert_from_fit(s, act, raw)
-
-    def _upsert_from_fit(self, s: Session, f: FitActivity, raw: RawFile) -> None:
-        key = dedup_key(f.start_utc, f.sport)
-        a = s.scalar(select(Activity).where(Activity.dedup_key == key))
-        if a is None:
-            a = self._match_by_time(s, f.start_utc, f.sport)
-        if a is None:
-            a = Activity(dedup_key=key, sport=f.sport, start_utc=f.start_utc, source="export-fit", updated_at=now())
-            s.add(a)
+        a, created = upsert_fit_activity(s, self.settings, act, raw, source="export-fit")
+        if created:
             self.counts["activities_added"] += 1
-            self.by_sport[f.sport] += 1
+            self.by_sport[a.sport] += 1
         else:
             self.counts["activities_updated"] += 1
-        a.source = "export-fit"
-        a.garmin_sport, a.garmin_sub_sport = f.garmin_sport, f.garmin_sub_sport
-        a.tz_offset_min = f.tz_offset_min if f.tz_offset_min is not None else a.tz_offset_min
-        for fld in ("elapsed_s", "timer_s", "distance_m", "ascent_m", "descent_m", "avg_hr", "max_hr",
-                    "avg_speed_ms", "max_speed_ms", "calories"):
-            setattr(a, fld, getattr(f, fld))
-        a.raw_file_id = raw.id
-        a.updated_at = now()
-        pts = f.gps_points
-        a.has_gps = len(pts) > 1
-        if a.has_gps:
-            a.start_lat, a.start_lon = pts[0]
-        s.flush()
-        if len(f.streams):
-            out = self.settings.streams_dir / f"{a.id}.parquet"
-            f.streams.to_parquet(out, index=False, compression="zstd")
-            a.has_streams = True
-        if a.has_gps:
-            thin = thin_by_distance(pts, 50.0)
-            lats, lons = [p[0] for p in pts], [p[1] for p in pts]
-            track = a.track or Track(activity_id=a.id)
-            track.polyline, track.points = encode_polyline(thin), len(thin)
-            track.min_lat, track.max_lat, track.min_lon, track.max_lon = min(lats), max(lats), min(lons), max(lons)
-            a.track = track
-
-    def _match_by_time(self, s: Session, start: datetime, sport: str) -> Activity | None:
-        cands = s.scalars(select(Activity).where(
-            Activity.start_utc.between(start - MATCH_WINDOW, start + MATCH_WINDOW))).all()
-        same = [c for c in cands if c.sport == sport] or cands
-        return min(same, key=lambda c: abs((c.start_utc - start).total_seconds())) if same else None
 
     # -------------------------------------------------------------- summaries and wellness
     def _apply_summaries(self, s: Session) -> None:
         """Attach Garmin IDs and names to FIT activities; create activities that only have a summary."""
         for sm in self.summaries:
-            a = None
-            if sm["garmin_id"] is not None:
-                a = s.scalar(select(Activity).where(Activity.garmin_id == sm["garmin_id"]))
-            if a is None:
-                a = self._match_by_time(s, sm["start_utc"], sm["sport"])
-            if a is not None:
-                if a.garmin_id is None and sm["garmin_id"] is not None:
-                    a.garmin_id = sm["garmin_id"]
-                a.name = a.name or sm["name"]
-                if a.tz_offset_min is None:
-                    a.tz_offset_min = sm["tz_offset_min"]
+            a, created = upsert_summary_activity(s, sm, source="export-summary")
+            if created:
+                self.counts["activities_added"] += 1
+                self.counts["activities_summary_only"] += 1
+                self.by_sport[a.sport] += 1
+            else:
                 self.counts["summaries_matched"] += 1
-                continue
-            a = Activity(dedup_key=dedup_key(sm["start_utc"], sm["sport"]), garmin_id=sm["garmin_id"],
-                         sport=sm["sport"], garmin_sport=sm["garmin_sport"], name=sm["name"],
-                         start_utc=sm["start_utc"], tz_offset_min=sm["tz_offset_min"], source="export-summary",
-                         updated_at=now(), has_gps=False)
-            for fld in ("elapsed_s", "timer_s", "distance_m", "ascent_m", "descent_m", "avg_hr", "max_hr",
-                        "calories", "start_lat", "start_lon"):
-                setattr(a, fld, sm[fld])
-            s.add(a)
-            s.flush()
-            self.counts["activities_added"] += 1
-            self.counts["activities_summary_only"] += 1
-            self.by_sport[sm["sport"]] += 1
 
     def _apply_wellness(self, s: Session) -> None:
         for day, fields in self.wellness.items():
-            row = s.get(DailyHealth, day)
-            if row is None:
-                row = DailyHealth(day=day, source="export", updated_at=now())
-                s.add(row)
+            if upsert_health(s, day, fields, source="export"):
                 self.counts["health_days_added"] += 1
-            for k, v in fields.items():
-                setattr(row, k, v)
-            row.updated_at = now()
 
     def _remember_newest(self, s: Session) -> None:
         newest = s.scalar(select(Activity.start_utc).order_by(Activity.start_utc.desc()).limit(1))

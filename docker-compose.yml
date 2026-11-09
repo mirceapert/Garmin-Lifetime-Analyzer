@@ -12,3 +12,15 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+
+  # Runs the Garmin sync once a day at GLA_SYNC_TIME, retrying a failed run up to three times.
+  worker:
+    build: ./backend
+    image: garmin-lifetime-analyzer:latest
+    command: ["gla", "worker"]
+    volumes:
+      - ./data:/data
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped

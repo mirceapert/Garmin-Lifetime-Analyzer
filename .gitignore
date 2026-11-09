@@ -1,6 +1,6 @@
 # your data and secrets never go to GitHub
-/data/
-/import/
+data/
+import/
 .env
 
 # Python
