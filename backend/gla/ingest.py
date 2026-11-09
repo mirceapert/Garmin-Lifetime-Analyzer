@@ -12,6 +12,7 @@ from .db import copy_raw
 from .fit_reader import FitActivity
 from .geo import encode_polyline, thin_by_distance
 from .models import Activity, DailyHealth, RawFile, Track
+from .text import fix_text
 
 MATCH_WINDOW = timedelta(seconds=90)
 SUMMARY_FIELDS = ("elapsed_s", "timer_s", "distance_m", "ascent_m", "descent_m", "avg_hr", "max_hr",
@@ -70,7 +71,7 @@ def upsert_fit_activity(s: Session, settings: Settings, f: FitActivity, raw: Raw
     a.source = source
     if garmin_id is not None and a.garmin_id is None:
         a.garmin_id = garmin_id
-    a.name = a.name or name
+    a.name = a.name or fix_text(name)
     a.garmin_sport, a.garmin_sub_sport = f.garmin_sport, f.garmin_sub_sport
     a.tz_offset_min = f.tz_offset_min if f.tz_offset_min is not None else a.tz_offset_min
     for fld in ("elapsed_s", "timer_s", "distance_m", "ascent_m", "descent_m", "avg_hr", "max_hr",
@@ -102,12 +103,12 @@ def upsert_summary_activity(s: Session, sm: dict, *, source: str) -> tuple[Activ
     if a is not None:
         if a.garmin_id is None and sm.get("garmin_id") is not None:
             a.garmin_id = sm["garmin_id"]
-        a.name = a.name or sm.get("name")
+        a.name = a.name or fix_text(sm.get("name"))
         if a.tz_offset_min is None:
             a.tz_offset_min = sm.get("tz_offset_min")
         return a, False
     a = Activity(dedup_key=dedup_key(sm["start_utc"], sm["sport"]), garmin_id=sm.get("garmin_id"), sport=sm["sport"],
-                 garmin_sport=sm.get("garmin_sport"), name=sm.get("name"), start_utc=sm["start_utc"],
+                 garmin_sport=sm.get("garmin_sport"), name=fix_text(sm.get("name")), start_utc=sm["start_utc"],
                  tz_offset_min=sm.get("tz_offset_min"), source=source, updated_at=now(), has_gps=False)
     for fld in SUMMARY_FIELDS:
         if sm.get(fld) is not None:

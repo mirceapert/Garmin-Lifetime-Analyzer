@@ -161,6 +161,8 @@ class ApiSync:
                 close()
         if status != "ok":
             raise SyncFailed(error)
+        from .analytics import analyze_quietly
+        report["analysis"] = analyze_quietly(self.settings, self.sessions)
         return report
 
     def _default_since(self, s: Session, until: date) -> date:

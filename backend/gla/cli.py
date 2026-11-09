@@ -114,6 +114,17 @@ def _cmd_regroup(args) -> int:
     return 0
 
 
+def _cmd_analyze(args) -> int:
+    from .analytics import run_analysis
+    settings = load_settings()
+    sessions = session_factory(make_engine(settings))
+    print("Analyzing" + (" everything again" if args.full else " new activities") + " ...")
+    rep = run_analysis(settings, sessions, full=args.full)
+    print(f"{rep.get('activities_analyzed', 0)} activities analyzed, {rep.get('routes_created', 0)} new routes, "
+          f"{rep.get('tiles', 0)} explorer tiles, {rep.get('names_fixed', 0)} names fixed.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="fitparse")
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -136,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     pw.set_defaults(func=_cmd_worker)
     prg = sub.add_parser("regroup", help="re-apply the sport groups to all stored activities")
     prg.set_defaults(func=_cmd_regroup)
+    pa = sub.add_parser("analyze", help="compute training load, best efforts, routes and tiles")
+    pa.add_argument("--full", action="store_true", help="recompute everything, not only new activities")
+    pa.set_defaults(func=_cmd_analyze)
     args = p.parse_args(argv)
     return args.func(args)
 

@@ -4,7 +4,7 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Status: milestone 2 of 6, live sync.** The app imports your full Garmin account export once, then keeps itself up to date from the Garmin Personal API every day. The web views come in the next milestones.
+**Status: milestone 3 of 6, analytics.** The app imports your full Garmin account export once, keeps itself up to date from the Garmin Personal API every day, and computes training load, best efforts, explorer tiles and repeated routes. The web views come in the next milestones.
 
 ## What you need
 
@@ -118,6 +118,44 @@ The key is used only from your computer. The app exchanges it for a 24-hour acce
 
 Warnings appear in `gla status` (and later in the app's header) from 7 days before the key expires, when Garmin rejects the key, and when the last sync failed. To replace the key, create a new one in Garmin Connect, update both lines in `.env`, then run `docker compose up -d` again.
 
+## Analytics
+
+After every import and sync the app analyzes new activities on its own. To run it by hand:
+
+```powershell
+docker compose run --rm app gla analyze          # only activities not analyzed yet
+docker compose run --rm app gla analyze --full   # everything again, after a method changes
+```
+
+What it computes:
+
+- **Training load** for every activity with heart rate (TRIMP, second by second when the per-second data has heart rate), using the resting and maximum heart rate from your Garmin profile. From it, fitness (42-day), fatigue (7-day) and form per day.
+- **Best efforts**: your fastest 1 km, 5 km, 10 km and half marathon inside any outdoor run or trail run. GPS jumps faster than 36 km/h are dropped first. Treadmill runs are left out because their distance comes from wrist motion.
+- **Explorer tiles**: every zoom-14 map square your GPS tracks crossed (tennis excluded), your largest fully covered square and largest cluster.
+- **Repeated routes**: tracks of the same kind (runs with trail runs, walks, rides) that start within 400 m, are within 12% in length and stay within 140 m on average become one route. A route shows once you have done it 3 times. Routes keep their ID and the name you give them when new activities arrive.
+- **Names**: activity names that arrived garbled from Garmin ("ReprizÄ") are repaired.
+
+The results are in the API, ready for the views in milestone 4 (open http://localhost:8000/docs to try them):
+
+| Endpoint | What |
+| --- | --- |
+| `GET /api/lifetime` | Odometer and totals per sport |
+| `GET /api/year-over-year?sports=run,trail` | Cumulative distance by day of year, per year |
+| `GET /api/best-efforts` | Every best effort per distance and the all-time best |
+| `GET /api/tiles` | Visited tiles, largest square and cluster, new tiles per year |
+| `GET /api/tracks` | All GPS tracks for the heatmap |
+| `GET /api/routes`, `GET /api/routes/{id}` | Repeated routes and every effort on one |
+| `PATCH /api/routes/{id}` | Rename a route, body `{"name": "Bega loop"}` |
+| `GET /api/training-load` | Daily load, fitness, fatigue and form |
+| `GET /api/health-days` | Sleep score, sleep time, night HRV and resting heart rate per day |
+
+## What to check (milestone 3 review)
+
+- `gla analyze` runs without errors.
+- Best efforts in `/api/best-efforts` look right against races you remember. Your half marathon best should be the Timisoara City Marathon half on 25 Oct 2026.
+- Your regular loops appear in `/api/routes`, and renaming one in `/docs` sticks after `gla analyze --full`.
+- Fitness and fatigue in `/api/training-load` rise after your heavier weeks.
+
 ## What to check (milestone 1 review)
 
 - The activity count and the first and last dates match Garmin Connect's activity list.
@@ -165,8 +203,8 @@ The tests build a small fake Garmin export (FIT files, activity summaries and we
 The full requirements and design are in the project's design doc. Milestones:
 
 1. Foundation and import
-2. Live sync from the Garmin Personal API (this one)
-3. Analytics on real data
+2. Live sync from the Garmin Personal API
+3. Analytics on real data (this one)
 4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts
 5. Tennis, Snowboard, Sleep and recovery, Forecasts
 6. Year in Review, setup guide and hosting checklist

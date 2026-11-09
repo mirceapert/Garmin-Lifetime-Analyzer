@@ -72,6 +72,8 @@ class ExportImporter:
                 run = s.get(SyncRun, run_id)
                 run.finished_at, run.status, run.error, run.report = now(), status, error, report
                 s.commit()
+        from ..analytics import analyze_quietly
+        report["analysis"] = analyze_quietly(self.settings, self.sessions)
         return report
 
     # -------------------------------------------------------------- per file
