@@ -4,10 +4,11 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Version 1.0.** All six milestones are built.
+**Version 1.1.** All six milestones are built, plus a Home tab and a shareable Year in Review image.
 
 - **[Setup guide](docs/setup-guide.md)**: from nothing to your history in the browser, everyday use, updates, backups and troubleshooting.
 - **[Hosting checklist](docs/hosting-checklist.md)**: what to do before the app is reachable from anywhere but your computer.
+- **Project page**: `docs/index.html`, a one-page description of the app for other people, with no personal data. To publish it: on GitHub, Settings › Pages › Deploy from a branch › `main` and `/docs`. It appears at `https://mirceapert.github.io/Garmin-Lifetime-Analyzer/`.
 
 ## Quick start
 
@@ -33,6 +34,7 @@ Then open **http://localhost:8000** in your browser. The app is reachable only f
 
 | Tab | What's on it |
 | --- | --- |
+| Home | Your lifetime at a glance, tonight's forecast, one number from each view with a link to it, and your latest activities. Before the first import it shows the setup steps |
 | Lifetime | Odometer, totals per sport, and year over year with year toggles your browser remembers |
 | Heatmap & tiles | Every GPS track on a map, sport layers, explorer tiles and your largest square, shortcuts to the places you're active |
 | Routes | Routes you repeat, how your pace changed on each, and a name you choose |
@@ -41,7 +43,7 @@ Then open **http://localhost:8000** in your browser. The app is reachable only f
 | Snowboard | Seasons with days on snow, runs, vertical, top speed, and the days of each season |
 | Sleep & recovery | Sleep score, HRV, resting heart rate and sleep time over the years, what goes with your better and worse nights, and how many nights you need after a hard session |
 | Forecasts | Tonight's sleep score and HRV, and a planner for your fitness and form on a day you pick |
-| Year in review | One year on one page: totals against the year before, month by month, best efforts and personal bests, the year's map, biggest day and week, longest of each sport, places, new tiles and routes, tennis, snowboard, fitness and sleep. Opens on the latest full year; `#year-2024` opens 2024 |
+| Year in review | One year on one page: totals against the year before, month by month, best efforts and personal bests, the year's map, biggest day and week, longest of each sport, places, new tiles and routes, tennis, snowboard, fitness and sleep. Opens on the latest full year; `#year-2024` opens 2024. At the bottom, **Share image** makes a 1080 × 1350 PNG of the year (Night or Day, your name if you want it, place names on or off). It's drawn in your browser and has no map, so it doesn't show where you live |
 
 The header shows when the last sync ran and has a **Sync now** button. API key warnings appear under it from 7 days before the key expires. Every tab has its own link (for example `http://localhost:8000/#routes-25`), so you can bookmark a route.
 
@@ -88,26 +90,24 @@ The results are in the API (open http://localhost:8000/docs to try them):
 | `GET /api/snow` | Snowboard seasons and their days |
 | `GET /api/sleep` | Nightly series, sleep drivers, recovery after hard sessions |
 | `GET /api/forecast` | Tonight's sleep score and HRV, and the starting point of the fitness planner |
+| `GET /api/home` | One number per view for the Home tab, tonight's forecast, the latest activities |
 | `GET /api/year-review?year=2025` | One year on one page; without `year`, the latest full year |
 
-## What to check (milestone 6 review)
+## What to check (version 1.1 review)
 
 ```powershell
-git checkout milestone-6-year-in-review
-git pull
+git checkout -- .
+git fetch origin
+git checkout home-share-public-page
 docker compose up -d --build
 ```
 
-No `analyze --full` this time: Year in Review is computed when you open it. Reload the page with Ctrl+F5.
+Reload the page with Ctrl+F5.
 
-- Year in review opens on 2025. The year buttons switch years, and `#year-2024` in the address opens 2024 directly.
-- The totals and the "vs the year before" numbers look right against what you remember; the month-by-month chart shows your sailing in September 2025.
-- Best efforts: 2026 shows the Timisoara City Marathon half as your best ever; 2025 shows the 10 km personal best of 26 October.
-- The map shows that year's tracks; the place buttons above it move it to the places you went that year.
-- Places: the names make sense, and "new" marks places you went to for the first time.
-- Phone width and dark mode read well.
-- Read the [setup guide](docs/setup-guide.md) as if you were starting again, and the [hosting checklist](docs/hosting-checklist.md): anything unclear, missing or wrong.
-- End to end: every tab opens, Sync now works, and `gla status` is clean.
+- http://localhost:8000 opens on Home. The numbers match the tabs they link to, and each tile opens its tab.
+- Tonight's card shows the same forecast as the Forecasts tab, and the Garmin key line matches `gla status`.
+- Year in review, bottom of the page: the share image for 2025 looks right in Night and Day; your name appears when you type it; Download image saves a PNG. Try 2024 and 2026 too.
+- Open `docs\index.html` in your browser (double-click it): the project page reads well on a wide window and a narrow one, and the links go to the right places on GitHub.
 
 ## Where things are
 
@@ -146,4 +146,6 @@ The full requirements and design are in the project's design doc. Milestones:
 3. Analytics on real data
 4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts
 5. Tennis, Snowboard, Sleep and recovery, Forecasts
-6. Year in Review, setup guide and hosting checklist (this one)
+6. Year in Review, setup guide and hosting checklist
+
+After version 1: a Home tab, a shareable Year in Review image and a project page (version 1.1, this one).

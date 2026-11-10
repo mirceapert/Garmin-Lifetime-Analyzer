@@ -294,3 +294,59 @@ def forecast(s: Session, tz: str, today: date) -> dict:
     if df.empty:
         return {"tonight": {}, "plan": {"ready": False}}
     return {"tonight": {k: fc.tonight(df, k, today) for k in fc.TARGETS}, "plan": fc.load_plan(df, today)}
+
+
+# ------------------------------------------------------------------ home (front page)
+
+def home(s: Session, tz: str, today: date) -> dict:
+    """One number per view for the Home tab. Everything here is also on the view it links to."""
+    from . import review as rv
+    life = lifetime(s)
+    if not life["activities"]:
+        return {"empty": True, "health_days": s.scalar(select(func.count()).select_from(DailyHealth)) or 0}
+    life.pop("colors", None)
+    out: dict = {"empty": False, "lifetime": {k: life[k] for k in ("activities", "first_day", "active_days", "foot_km",
+                                                                  "earth_share", "hours", "ascent_m")}}
+    out["health_days"] = s.scalar(select(func.count()).select_from(DailyHealth)) or 0
+    t = tiles(s)
+    out["tiles"] = {"visited": len(t["tiles"]), "largest_square": t["max_square"]["size"]}
+    out["routes"] = len(routes(s))
+    be = best_efforts(s)
+    # the longest distance you have a best for is the headline
+    best = next((dict(v["best"], distance=k) for k in reversed(list(DISTANCES)) if (v := be.get(k)) and v.get("best")), None)
+    out["best_effort"] = best
+    tn_rows = s.scalars(select(Activity).where(Activity.sport == "tennis")).all()
+    with_court = s.scalar(select(func.count()).select_from(TennisSession)) or 0
+    out["tennis"] = {"sessions": len(tn_rows), "hours": round(sum((a.timer_s or a.elapsed_s or 0) for a in tn_rows) / 3600, 1),
+                     "with_court": with_court} if tn_rows else None
+    sn_tot = snow(s)["totals"]
+    out["snow"] = sn_tot if sn_tot["days_on_snow"] else None
+    df = sl.day_frame(s, tz, today)
+    rec = sl.recovery(df, sl.activity_loads(s)) if not df.empty else {"metrics": {}}
+    hrv = rec["metrics"].get("hrv", {}).get("overall") if rec.get("metrics") else None
+    rhr = rec["metrics"].get("rhr", {}).get("overall") if rec.get("metrics") else None
+    pick = hrv if hrv and hrv.get("sessions") else rhr
+    out["recovery"] = {"metric": "hrv" if pick is hrv else "rhr", "back_by": pick.get("back_by"), "sessions": pick["sessions"],
+                       "night1": pick["nights"][0]["mean"] if pick["nights"] and pick["nights"][0] else None} if pick and pick.get("sessions") else None
+    out["tonight"] = {k: {kk: v.get(kk) for kk in ("ready", "label", "unit", "prediction", "band", "night_of")}
+                      for k, v in ((k, fc.tonight(df, k, today)) for k in fc.TARGETS)} if not df.empty else {}
+    plan = fc.load_plan(df, today) if not df.empty else {"ready": False}
+    out["fitness"] = {k: plan.get(k) for k in ("fitness", "fatigue", "form", "peak_fitness")} if plan.get("ready") else None
+    years = rv.available_years(s)
+    y = rv.default_year(years, today)
+    if y is not None:
+        acts = [a for a in s.scalars(select(Activity)) if local_day(a).year == y]
+        tot = rv._totals(acts)
+        out["year"] = {"year": y, "hours": tot["hours"], "active_days": tot["active_days"], "activities": tot["activities"]}
+    latest = s.scalars(select(Activity).order_by(Activity.start_utc.desc()).limit(5)).all()
+    ids = [a.id for a in latest]
+    sess = {x.activity_id: x for x in s.scalars(select(TennisSession).where(TennisSession.activity_id.in_(ids)))}
+    best_ids = {}
+    for k, v in be.items():
+        if v.get("best"):
+            best_ids.setdefault(v["best"]["activity_id"], []).append(k)
+    out["latest"] = [{"activity_id": a.id, "date": local_day(a).isoformat(), "sport": a.sport, "name": a.name,
+                      "distance_km": round((a.distance_m or 0) / 1000, 2), "seconds": a.timer_s or a.elapsed_s,
+                      "has_gps": bool(a.has_gps), "base_share": sess[a.id].base_share if a.id in sess else None,
+                      "best_ever": best_ids.get(a.id, [])} for a in latest]
+    return out

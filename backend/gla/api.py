@@ -189,6 +189,14 @@ def get_forecast() -> dict:
         return q.forecast(s, settings.timezone, _today())
 
 
+# ------------------------------------------------------------------ home
+@app.get("/api/home")
+def get_home() -> dict:
+    """The Home tab: one number per view, tonight's forecast, the latest activities. {"empty": true} before any import."""
+    with sessions() as s:
+        return q.home(s, settings.timezone, _today())
+
+
 # ------------------------------------------------------------------ milestone 6
 @app.get("/api/year-review")
 def get_year_review(year: int | None = None) -> dict:
