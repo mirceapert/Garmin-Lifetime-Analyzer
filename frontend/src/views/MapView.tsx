@@ -8,9 +8,15 @@ import { cssVar } from "../lib/theme";
 import { useChart } from "../lib/useChart";
 import { useData } from "../lib/useData";
 
-// Dark base map in both themes: the tracks glow on a night ground.
 // OpenFreeMap: free vector tiles from OpenStreetMap data, no API key or account needed.
-const MAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
+// Dark is the default: tracks glow on a night ground. Light and Streets show more of the city.
+const BASEMAPS = [
+  { key: "dark", label: "Dark", url: "https://tiles.openfreemap.org/styles/dark" },
+  { key: "light", label: "Light", url: "https://tiles.openfreemap.org/styles/positron" },
+  { key: "streets", label: "Streets", url: "https://tiles.openfreemap.org/styles/liberty" },
+] as const;
+type BasemapKey = (typeof BASEMAPS)[number]["key"];
+const styleUrl = (k: string) => (BASEMAPS.find(b => b.key === k) ?? BASEMAPS[0]).url;
 // If OpenFreeMap can't be reached, fall back to the standard OpenStreetMap tiles, darkened.
 const FALLBACK_STYLE: StyleSpecification = {
   version: 8,
@@ -67,7 +73,6 @@ export function MapView({ scheme }: { scheme: string }) {
   const [tiles, tiErr] = useData(api.tiles);
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [ready, setReady] = useState(false);
   const [sports, setSports] = useState<Record<string, boolean>>(() => load("map-sports", {}));
   const [showTiles, setShowTiles] = useState<boolean>(() => load("map-tiles", true));
   const [area, setArea] = useState<number>(0);
@@ -80,73 +85,88 @@ export function MapView({ scheme }: { scheme: string }) {
   }, [tracks]);
   const visible = (k: string) => sports[k] !== false;
 
+  const [basemap, setBasemap] = useState<BasemapKey>(() => load("map-base", "dark"));
+  const [styleGen, setStyleGen] = useState(0);              // bumps each time a base map finishes loading
+  const [usingFallback, setUsingFallback] = useState(false);
+  const switchStyle = useRef<(url: string) => void>(() => {});
+  const fitted = useRef(false);
+
   // create the map once
   useEffect(() => {
     if (!box.current) return;
-    const map = new maplibregl.Map({ container: box.current, style: MAP_STYLE, center: [21.23, 45.75], zoom: 11, attributionControl: { compact: true } });
+    const map = new maplibregl.Map({ container: box.current, style: styleUrl(basemap), center: [21.23, 45.75], zoom: 11, attributionControl: { compact: true } });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
     let settled = false;
+    let timer = 0;
     const fallback = () => {
       if (settled) return;
       settled = true;
-      map.setStyle(FALLBACK_STYLE);
-      map.once("styledata", () => setReady(true));
+      setUsingFallback(true);
+      map.setStyle(FALLBACK_STYLE, { diff: false });
     };
-    map.on("load", () => { settled = true; setReady(true); });
+    const arm = () => { settled = false; clearTimeout(timer); timer = window.setTimeout(fallback, STYLE_TIMEOUT_MS); };
+    // a new base map wipes our layers: count the loads so the overlay effects add them again
+    map.on("style.load" as "styledata", () => { settled = true; clearTimeout(timer); setStyleGen(g => g + 1); });
     // the style itself failed (not a single tile): use the fallback map
     map.on("error", e => { if (!settled && !("sourceId" in e)) fallback(); });
-    const timer = setTimeout(fallback, STYLE_TIMEOUT_MS);
+    switchStyle.current = url => { arm(); setUsingFallback(false); map.setStyle(url, { diff: false }); };
+    arm();
     mapRef.current = map;
     return () => { clearTimeout(timer); map.remove(); mapRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const pickBasemap = (k: BasemapKey) => {
+    if (k === basemap && !usingFallback) return;
+    setBasemap(k); save("map-base", k);
+    switchStyle.current(styleUrl(k));
+  };
 
   // tracks layer
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !tracks) return;
-    const fc: GeoJSON.FeatureCollection = {
-      type: "FeatureCollection",
-      features: tracks.map(t => ({ type: "Feature", properties: { sport: t.sport, id: t.id },
-        geometry: { type: "LineString", coordinates: decode(t.polyline).map(([la, lo]) => [lo, la]) } })),
-    };
-    const color: maplibregl.ExpressionSpecification = ["match", ["get", "sport"], ...SPORTS.flatMap(s => [s.key, cssVar(`--${s.key}`)]), "#999"] as unknown as maplibregl.ExpressionSpecification;
-    if (map.getSource("tracks")) (map.getSource("tracks") as maplibregl.GeoJSONSource).setData(fc);
-    else {
+    if (!map || !styleGen || !tracks) return;
+    if (!map.getSource("tracks")) {
+      const fc: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: tracks.map(t => ({ type: "Feature", properties: { sport: t.sport, id: t.id },
+          geometry: { type: "LineString", coordinates: decode(t.polyline).map(([la, lo]) => [lo, la]) } })),
+      };
+      const color = ["match", ["get", "sport"], ...SPORTS.flatMap(s => [s.key, cssVar(`--${s.key}`)]), "#999"] as unknown as maplibregl.ExpressionSpecification;
       map.addSource("tracks", { type: "geojson", data: fc });
       map.addLayer({ id: "tracks", type: "line", source: "tracks", layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": color, "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.55, 14, 0.4],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 12, 1.6, 16, 3] } }, firstLabel(map));
+        paint: { "line-color": color, "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 0.45],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 12, 1.8, 16, 3.2] } }, firstLabel(map));
     }
-    if (areas[0]) map.fitBounds(areas[0].bounds, { padding: 30, duration: 0 });
-  }, [ready, tracks, areas, scheme]);
+    if (!fitted.current && areas[0]) { fitted.current = true; map.fitBounds(areas[0].bounds, { padding: 30, duration: 0 }); }
+  }, [styleGen, tracks, areas, scheme]);
 
   // tiles layers
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !tiles) return;
+    if (!map || !styleGen || !tiles || map.getSource("tiles")) return;
     const cluster = new Set(tiles.cluster.map(([x, y]) => `${x},${y}`));
     const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: tiles.tiles.map(([x, y, first]) => ({
       type: "Feature", properties: { cluster: cluster.has(`${x},${y}`), first }, geometry: { type: "Polygon", coordinates: tilePolygon(x, y, tiles.zoom) } })) };
     const sq = tiles.max_square;
     const square: GeoJSON.Feature = { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: tilePolygon(sq.x, sq.y, tiles.zoom, sq.size) } };
-    if (!map.getSource("tiles")) {
-      map.addSource("tiles", { type: "geojson", data: fc });
-      map.addSource("square", { type: "geojson", data: square });
-      const below = map.getLayer("tracks") ? "tracks" : firstLabel(map);
-      map.addLayer({ id: "tiles-fill", type: "fill", source: "tiles", paint: { "fill-color": "#9085e9", "fill-opacity": ["case", ["get", "cluster"], 0.28, 0.12] } }, below);
-      map.addLayer({ id: "tiles-line", type: "line", source: "tiles", paint: { "line-color": "#9085e9", "line-opacity": 0.35, "line-width": 0.6 } }, below);
-      map.addLayer({ id: "square", type: "line", source: "square", paint: { "line-color": "#c9c2ff", "line-width": 2, "line-dasharray": [3, 2] } }, firstLabel(map));
-    }
-  }, [ready, tiles]);
+    const tint = basemap === "dark" || usingFallback ? "#9085e9" : "#5848c9";
+    map.addSource("tiles", { type: "geojson", data: fc });
+    map.addSource("square", { type: "geojson", data: square });
+    const below = map.getLayer("tracks") ? "tracks" : firstLabel(map);
+    map.addLayer({ id: "tiles-fill", type: "fill", source: "tiles", paint: { "fill-color": tint, "fill-opacity": ["case", ["get", "cluster"], 0.26, 0.11] } }, below);
+    map.addLayer({ id: "tiles-line", type: "line", source: "tiles", paint: { "line-color": tint, "line-opacity": 0.35, "line-width": 0.6 } }, below);
+    map.addLayer({ id: "square", type: "line", source: "square", paint: { "line-color": basemap === "dark" || usingFallback ? "#c9c2ff" : "#3b2fa3", "line-width": 2, "line-dasharray": [3, 2] } }, firstLabel(map));
+  }, [styleGen, tiles]);
 
   // visibility
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) return;
+    if (!map || !styleGen) return;
     if (map.getLayer("tracks")) map.setFilter("tracks", ["in", ["get", "sport"], ["literal", SPORTS.map(s => s.key).filter(visible)]]);
     for (const id of ["tiles-fill", "tiles-line", "square"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", showTiles ? "visible" : "none");
-  }, [ready, sports, showTiles, tracks, tiles]);
+  }, [styleGen, sports, showTiles, tracks, tiles]);
 
   const goArea = (i: number) => { setArea(i); mapRef.current?.fitBounds(areas[i].bounds, { padding: 30 }); };
   const fitAll = () => {
@@ -170,6 +190,13 @@ export function MapView({ scheme }: { scheme: string }) {
         <div className="mapbox"><div ref={box} style={{ position: "absolute", inset: 0 }} /></div>
         <div className="panel">
           <h3>Layers</h3>
+          <div style={{ display: "grid", gap: 6 }}>
+            <span className="eyebrow">Base map</span>
+            <div className="seg" role="group" aria-label="Base map">
+              {BASEMAPS.map(b => <button key={b.key} aria-pressed={b.key === basemap && !usingFallback} onClick={() => pickBasemap(b.key)}>{b.label}</button>)}
+            </div>
+            {usingFallback && <span className="small muted">OpenFreeMap didn't answer, so this is the standard OpenStreetMap map. Pick a base map to try again.</span>}
+          </div>
           <div style={{ display: "grid", gap: 8 }}>
             {SPORTS.filter(s => counts[s.key]).map(s => (
               <label className="ck" key={s.key}><input type="checkbox" checked={visible(s.key)} onChange={() => toggleSport(s.key)} />

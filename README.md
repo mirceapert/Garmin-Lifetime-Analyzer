@@ -135,7 +135,7 @@ Then open **http://localhost:8000** in your browser. The app is reachable only f
 
 The header shows when the last sync ran and has a **Sync now** button. API key warnings appear under it from 7 days before the key expires. Every tab has its own link (for example `http://localhost:8000/#routes-25`), so you can bookmark a route.
 
-The base map comes from [OpenFreeMap](https://openfreemap.org), which serves OpenStreetMap data for free with no API key or account. If it can't be reached, the map falls back to the standard OpenStreetMap tiles, darkened. Either way the map tab needs an internet connection, and nothing about you is sent with those requests apart from which map squares you look at.
+The base map comes from [OpenFreeMap](https://openfreemap.org), which serves OpenStreetMap data for free with no API key or account. The Layers panel switches between three base maps: Dark (the default, so tracks stand out), Light and Streets. Your choice is remembered. If it can't be reached, the map falls back to the standard OpenStreetMap tiles, darkened. Either way the map tab needs an internet connection, and nothing about you is sent with those requests apart from which map squares you look at.
 
 ## Analytics
 
