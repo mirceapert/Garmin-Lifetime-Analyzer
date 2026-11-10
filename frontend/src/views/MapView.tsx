@@ -10,15 +10,15 @@ import { useData } from "../lib/useData";
 
 // OpenFreeMap: free vector tiles from OpenStreetMap data, no API key or account needed.
 // Dark is the default: tracks glow on a night ground. Light and Streets show more of the city.
-const BASEMAPS = [
+export const BASEMAPS = [
   { key: "dark", label: "Dark", url: "https://tiles.openfreemap.org/styles/dark" },
   { key: "light", label: "Light", url: "https://tiles.openfreemap.org/styles/positron" },
   { key: "streets", label: "Streets", url: "https://tiles.openfreemap.org/styles/liberty" },
 ] as const;
 type BasemapKey = (typeof BASEMAPS)[number]["key"];
-const styleUrl = (k: string) => (BASEMAPS.find(b => b.key === k) ?? BASEMAPS[0]).url;
+export const styleUrl = (k: string) => (BASEMAPS.find(b => b.key === k) ?? BASEMAPS[0]).url;
 // If OpenFreeMap can't be reached, fall back to the standard OpenStreetMap tiles, darkened.
-const FALLBACK_STYLE: StyleSpecification = {
+export const FALLBACK_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     osm: {
@@ -32,15 +32,19 @@ const FALLBACK_STYLE: StyleSpecification = {
     { id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": -0.85, "raster-brightness-max": 0.32, "raster-contrast": 0.15 } },
   ],
 };
-const STYLE_TIMEOUT_MS = 10_000;
+export const STYLE_TIMEOUT_MS = 10_000;
 
 /** Id of the first label layer, so tracks draw above roads but under place names. */
-const firstLabel = (map: maplibregl.Map) => map.getStyle().layers.find(l => l.type === "symbol")?.id;
+export const firstLabel = (map: maplibregl.Map) => map.getStyle().layers.find(l => l.type === "symbol")?.id;
 
-interface Area { label: string; count: number; bounds: LngLatBoundsLike }
+export interface Area { label: string; count: number; bounds: LngLatBoundsLike }
+
+// names Garmin gives with no place in them ("Sailing", "Treadmill Running", "Alergare pe bandă")
+const NOT_PLACES = new Set(["sailing", "running", "walking", "cycling", "tennis", "hiking", "kayaking", "treadmill", "trail", "indoor",
+  "snowboarding", "skiing", "padel", "strength", "cardio", "alergare", "ciclism", "înot", "mers", "navigație", "drumeție", "yoga"]);
 
 /** Group tracks by where they start (0.25° cells) and name each place after the word its activities share most. */
-function findAreas(tracks: TrackRow[]): Area[] {
+export function findAreas(tracks: TrackRow[]): Area[] {
   const cells = new Map<string, TrackRow[]>();
   for (const t of tracks) {
     const k = `${Math.round(t.bbox[0] * 4)},${Math.round(t.bbox[1] * 4)}`;
@@ -50,7 +54,7 @@ function findAreas(tracks: TrackRow[]): Area[] {
     const words = new Map<string, number>();
     for (const t of ts) {
       const w = (t.name ?? "").split(/[\s\-–,]+/)[0];
-      if (w && w.length > 2 && /^\p{Lu}/u.test(w)) words.set(w, (words.get(w) ?? 0) + 1);
+      if (w && w.length > 2 && /^\p{Lu}/u.test(w) && !NOT_PLACES.has(w.toLowerCase())) words.set(w, (words.get(w) ?? 0) + 1);
     }
     const label = [...words.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? `Area ${i + 1}`;
     // fit to the middle 90% of tracks so one long ride doesn't zoom the map out

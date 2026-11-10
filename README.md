@@ -4,119 +4,24 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Status: milestone 5 of 6.** The app imports your Garmin history, keeps itself up to date every day, and shows it in your browser: lifetime totals, the heatmap with explorer tiles, repeated routes, best efforts, tennis court coverage, snowboard seasons, sleep and recovery, and forecasts. Year in Review comes in milestone 6.
+**Version 1.0.** All six milestones are built.
 
-## What you need
+- **[Setup guide](docs/setup-guide.md)**: from nothing to your history in the browser, everyday use, updates, backups and troubleshooting.
+- **[Hosting checklist](docs/hosting-checklist.md)**: what to do before the app is reachable from anywhere but your computer.
 
-- Docker Desktop, running
-- Git, or download this repository as a zip from GitHub
-- Your Garmin account export (the zip Garmin emails you a link to)
+## Quick start
 
-## First run on Windows
+With Docker Desktop running and your Garmin export zip in an `import` folder next to this file:
 
-Open PowerShell and run these commands one at a time.
+```powershell
+docker compose build
+docker compose run --rm app gla import --json /data/import-report.json
+copy .env.example .env     # then put your Garmin Personal API key in it
+docker compose up -d
+docker compose run --rm app gla sync
+```
 
-1. Get the code and go into its folder:
-
-   ```powershell
-   git clone https://github.com/mirceapert/Garmin-Lifetime-Analyzer.git
-   cd Garmin-Lifetime-Analyzer
-   ```
-
-2. Make the import folder and put your Garmin export zip in it. Leave it zipped; the importer opens it, and the zips inside it, in place.
-
-   ```powershell
-   mkdir import
-   ```
-
-   Then copy the export zip into `Garmin-Lifetime-Analyzer\import`.
-
-3. Build the app (the first time takes a few minutes):
-
-   ```powershell
-   docker compose build
-   ```
-
-4. Import your history:
-
-   ```powershell
-   docker compose run --rm app gla import --json /data/import-report.json
-   ```
-
-   A full export can take 10 to 30 minutes. Progress is printed every 50 files. At the end you get a summary like this:
-
-   ```text
-   Activities: 1382  (2021-11-08 to 2026-11-08)
-     with GPS: 1190   with per-second data: 1350   summary only: 32
-
-     Sport            Count    Distance    Hours  First       Last
-     Running            590   5904.0 km    541.0  2021-11-09  2026-11-07
-     ...
-
-   Daily health: 1827 days (2021-11-08 to 2026-11-08)
-     days with sleep score: 1790, sleep time: 1800, night HRV: 1500, resting HR: 1820
-   ```
-
-   These numbers are only an example; yours will differ.
-
-5. Start the app and check it answers:
-
-   ```powershell
-   docker compose up -d
-   ```
-
-   Open http://localhost:8000/api/library in your browser. It shows the same summary as JSON. `http://localhost:8000/docs` lists the API.
-
-Running the import again is safe. Files already imported are recognised and skipped, so nothing is duplicated. A copy of the database is saved in `data\backups` before every import.
-
-## Live sync from Garmin
-
-After the export is imported, the app keeps itself up to date from the Garmin Personal API.
-
-1. Make your settings file from the example:
-
-   ```powershell
-   copy .env.example .env
-   notepad .env
-   ```
-
-   Fill in `GARMIN_API_KEY` with your Personal API key, and `GARMIN_API_KEY_EXPIRES` with the expiry date Garmin Connect shows for it (for example `2027-11-09`). Check `TZ` and `GLA_SYNC_TIME`. Save and close.
-
-2. Rebuild and start everything:
-
-   ```powershell
-   docker compose build
-   docker compose up -d
-   ```
-
-   This starts two containers: `app` (the API) and `worker`, which syncs once a day at `GLA_SYNC_TIME`. If a sync fails, the worker tries again 30 minutes later, up to three times that day.
-
-3. Run the first sync now instead of waiting for tomorrow:
-
-   ```powershell
-   docker compose run --rm app gla sync
-   ```
-
-   It starts the day before your newest exported activity, so nothing between the export and today is missed. Without an export it goes back 30 days; `--since 2026-10-01` picks the start yourself.
-
-4. Check the status:
-
-   ```powershell
-   docker compose run --rm app gla status
-   ```
-
-   The same is at http://localhost:8000/api/sync/status. To sync from the browser, open http://localhost:8000/docs, pick `POST /api/sync` and press "Try it out", then "Execute". The web app's Sync now button arrives with the first views.
-
-What a sync does:
-
-- reads your activity list for the window and downloads the original FIT file of each activity it doesn't have yet. Activities without a FIT file, such as uploaded GPX files, are kept from their summary
-- reads sleep, HRV and resting heart rate for each day, re-reading the last two days because a night's data arrives after you wake up
-- reads the resting and maximum heart rate Garmin uses for your zones; training load will use them
-- saves everything in one go: a sync that fails part-way changes nothing and can simply be run again
-
-The key is used only from your computer. The app exchanges it for a 24-hour access token, cached in `data\.garmin-token.json`, and asks for a new one when needed.
-
-Warnings appear in `gla status` (and later in the app's header) from 7 days before the key expires, when Garmin rejects the key, and when the last sync failed. To replace the key, create a new one in Garmin Connect, update both lines in `.env`, then run `docker compose up -d` again.
+Open http://localhost:8000. The [setup guide](docs/setup-guide.md) explains each step.
 
 ## Using the app
 
@@ -136,6 +41,7 @@ Then open **http://localhost:8000** in your browser. The app is reachable only f
 | Snowboard | Seasons with days on snow, runs, vertical, top speed, and the days of each season |
 | Sleep & recovery | Sleep score, HRV, resting heart rate and sleep time over the years, what goes with your better and worse nights, and how many nights you need after a hard session |
 | Forecasts | Tonight's sleep score and HRV, and a planner for your fitness and form on a day you pick |
+| Year in review | One year on one page: totals against the year before, month by month, best efforts and personal bests, the year's map, biggest day and week, longest of each sport, places, new tiles and routes, tennis, snowboard, fitness and sleep. Opens on the latest full year; `#year-2024` opens 2024 |
 
 The header shows when the last sync ran and has a **Sync now** button. API key warnings appear under it from 7 days before the key expires. Every tab has its own link (for example `http://localhost:8000/#routes-25`), so you can bookmark a route.
 
@@ -163,6 +69,7 @@ What it computes:
 - **Sleep drivers** (computed when you open the tab): nights after a hard day, a rest day, a late workout, tennis, a run, a weekend, a late bedtime, a short night or high fatigue, compared with the nights without, each against your level in the two months around it. Shown with a 95% range, and only with 20 nights or more on each side.
 - **Recovery**: night HRV and resting heart rate in the 4 nights after your hardest sessions (top 15% load), against your median of the 7 nights before. Per year from 8 sessions.
 - **Tonight's forecast**: a small linear model trained on your own nights each time you open the tab, with its accuracy against simply guessing your 7-night average.
+- **Year in Review** (computed when you open the tab): nothing new is measured; the numbers above are cut to one calendar year. A personal best counts when an effort beat every earlier one at the time. Places come from the names Garmin gives activities ("Timisoara Running" is Timisoara; "Treadmill Running" has no place).
 
 The results are in the API (open http://localhost:8000/docs to try them):
 
@@ -181,56 +88,26 @@ The results are in the API (open http://localhost:8000/docs to try them):
 | `GET /api/snow` | Snowboard seasons and their days |
 | `GET /api/sleep` | Nightly series, sleep drivers, recovery after hard sessions |
 | `GET /api/forecast` | Tonight's sleep score and HRV, and the starting point of the fitness planner |
+| `GET /api/year-review?year=2025` | One year on one page; without `year`, the latest full year |
 
-## What to check (milestone 5 review)
-
-After updating, rebuild and run the analysis once in full, because tennis and snowboard metrics are new:
+## What to check (milestone 6 review)
 
 ```powershell
+git checkout milestone-6-year-in-review
+git pull
 docker compose up -d --build
-docker compose run --rm app gla analyze --full
 ```
 
-- Tennis: your 3 "Table Tennis" activities are gone from the list (they are under Other on the Lifetime tab now). Your 2026 sessions are found on a different court from 2024 and 2025 (two of them on a third one). The heatmap's bright areas sit behind the baseline and near the net posts.
-- Tennis: open a session from the list, step with Previous and Next, and check heart rate per minute against Garmin Connect. Copy the address (`#tennis-…`) into a new tab: it opens the same session.
-- Snowboard: 6 seasons, the days on snow per season match your trips; 2021/22 and 2022/23 show "–" for runs (the watch lost altitude), with vertical still there.
-- Sleep & recovery: the drivers make sense to you (tennis evenings and late nights are the obvious ones to look for). Night HRV is shown from September 2025 only, because Garmin has it from then.
-- Forecasts: tonight's numbers are plausible; move the planner's target day, level and easier days, and see form on the target day change. Reload: your planner settings are still there.
-- Everything reads well at phone width, in light and dark.
+No `analyze --full` this time: Year in Review is computed when you open it. Reload the page with Ctrl+F5.
 
-## What to check (milestone 4 review)
-
-- http://localhost:8000 opens, and still reads well when you make the browser window narrow (phone width).
-- Lifetime: the totals match the earlier `gla report`, and the year toggles stay as you left them after a reload.
-- Heatmap: your tracks sit on the right streets; the place shortcuts make sense; sport layers turn on and off.
-- Routes: rename a route, reload the page, the name is still there.
-- Best efforts: the half marathon best is the Timisoara City Marathon half.
-- Sync now runs and the time in the header updates.
-
-## What to check (milestone 3 review)
-
-- `gla analyze` runs without errors.
-- Best efforts in `/api/best-efforts` look right against races you remember. Your half marathon best should be the Timisoara City Marathon half on 25 Oct 2026.
-- Your regular loops appear in `/api/routes`, and renaming one in `/docs` sticks after `gla analyze --full`.
-- Fitness and fatigue in `/api/training-load` rise after your heavier weeks.
-
-## What to check (milestone 1 review)
-
-- The activity count and the first and last dates match Garmin Connect's activity list.
-- Each sport's count looks right. Activities Garmin records as other sports are counted under Other.
-- "Summary only" activities have no FIT file in the export. Open one or two in Garmin Connect and compare distance and duration with `gla report`.
-- Daily health covers the days you wore the watch, with sleep score, HRV and resting heart rate.
-- Anything listed as failed in the import output.
-
-The full report is saved at `data\import-report.json`. It holds counts, dates and file names, but no GPS positions.
-
-## What to check (milestone 2 review)
-
-- `gla sync` finishes and `gla status` shows the key as ok with the right expiry date.
-- Record a short activity, wait until it appears in Garmin Connect, run `gla sync`: it is added once. Running `gla sync` again adds nothing.
-- Last night's sleep score, HRV and resting heart rate match the Garmin Connect app (`gla report` shows the day counts).
-- `gla status` shows your resting and maximum heart rate from Garmin.
-- The next morning, `gla status` shows the worker's scheduled sync ran.
+- Year in review opens on 2025. The year buttons switch years, and `#year-2024` in the address opens 2024 directly.
+- The totals and the "vs the year before" numbers look right against what you remember; the month-by-month chart shows your sailing in September 2025.
+- Best efforts: 2026 shows the Timisoara City Marathon half as your best ever; 2025 shows the 10 km personal best of 26 October.
+- The map shows that year's tracks; the place buttons above it move it to the places you went that year.
+- Places: the names make sense, and "new" marks places you went to for the first time.
+- Phone width and dark mode read well.
+- Read the [setup guide](docs/setup-guide.md) as if you were starting again, and the [hosting checklist](docs/hosting-checklist.md): anything unclear, missing or wrong.
+- End to end: every tab opens, Sync now works, and `gla status` is clean.
 
 ## Where things are
 
@@ -268,5 +145,5 @@ The full requirements and design are in the project's design doc. Milestones:
 2. Live sync from the Garmin Personal API
 3. Analytics on real data
 4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts
-5. Tennis, Snowboard, Sleep and recovery, Forecasts (this one)
-6. Year in Review, setup guide and hosting checklist
+5. Tennis, Snowboard, Sleep and recovery, Forecasts
+6. Year in Review, setup guide and hosting checklist (this one)

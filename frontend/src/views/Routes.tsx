@@ -9,7 +9,7 @@ import { useData } from "../lib/useData";
 const GROUP_LABEL = { run: "Running", walk: "Walking", cycle: "Cycling" } as const;
 const GROUP_COLOR = { run: "--run", walk: "--walk", cycle: "--cycle" } as const;
 
-const routeTitle = (r: { name: string | null; length_km: number; loop: boolean; group: keyof typeof GROUP_LABEL }) =>
+export const routeTitle = (r: { name: string | null; length_km: number; loop: boolean; group: keyof typeof GROUP_LABEL }) =>
   r.name ?? `${nf(r.length_km, 1)} km ${GROUP_LABEL[r.group].toLowerCase()} ${r.loop ? "loop" : "route"}`;
 
 export function Routes({ selected }: { selected: number | null }) {
