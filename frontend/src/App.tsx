@@ -8,6 +8,7 @@ import { Tennis } from "./views/Tennis";
 import { Snow } from "./views/Snow";
 import { Sleep } from "./views/Sleep";
 import { Forecasts } from "./views/Forecasts";
+import { YearReview } from "./views/YearReview";
 import { useColorScheme } from "./lib/theme";
 
 // the map library is large: load it only when the map tab opens
@@ -22,6 +23,7 @@ const TABS = [
   { id: "snow", label: "Snowboard" },
   { id: "sleep", label: "Sleep & recovery" },
   { id: "forecasts", label: "Forecasts" },
+  { id: "year", label: "Year in review" },
 ];
 
 export function App() {
@@ -55,6 +57,7 @@ export function App() {
         {current === "snow" && <Snow key={key} />}
         {current === "sleep" && <Sleep key={key} />}
         {current === "forecasts" && <Forecasts key={key} />}
+        {current === "year" && <YearReview key={key} selected={param ? Number(param) : null} />}
       </main>
       <footer>Data from your Garmin account, stored on this computer. Map: OpenFreeMap © OpenMapTiles, data © OpenStreetMap contributors.</footer>
     </div>

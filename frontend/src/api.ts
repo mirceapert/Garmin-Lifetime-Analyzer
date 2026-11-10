@@ -65,6 +65,29 @@ export interface LoadPlan {
 export interface Forecast { tonight: Record<string, Tonight>; plan: LoadPlan }
 export interface TrainingLoad { days: [string, number, number, number, number][]; hr_profile: { rest: number; max: number } | null }
 
+// milestone 6
+export interface YearTotals { activities: number; active_days: number; longest_streak: number; distance_km: number; foot_km: number; hours: number; ascent_m: number; by_sport: { sport: string; activities: number; distance_km: number; hours: number }[] }
+export interface YearAct { activity_id: number; date: string; sport: string; name: string | null; distance_km: number; hours: number }
+export interface YearReview {
+  year: number | null; years: number[]; partial: boolean; through: string;
+  totals: YearTotals; previous: YearTotals | null; first?: YearAct; last?: YearAct;
+  months?: { month: number; hours: Record<string, number>; distance_km: Record<string, number>; activities: number }[];
+  biggest_day?: { date: string; hours: number; distance_km: number; activities: YearAct[] };
+  biggest_week?: { monday: string; hours: number; distance_km: number; activities: number; sports: string[] };
+  longest?: Record<string, YearAct>;
+  records?: { distance: string; distance_m: number; seconds: number; date: string; activity_id: number; name: string | null; all_time: boolean;
+    personal_bests: { date: string; seconds: number; activity_id: number; name: string | null; improved_by: number | null }[] }[];
+  places?: { count: number; new: number; top: { place: string; activities: number; new: boolean }[]; new_places: string[] };
+  tiles?: { new: number; total_at_year_end: number };
+  routes?: { new: number; top: { route_id: number; name: string | null; group: "run" | "walk" | "cycle"; length_km: number; loop: boolean; times: number }[] };
+  tennis?: { sessions: number; hours: number; with_gps: number; net_share: number | null; base_share: number | null; right_share: number | null; top_speed_kmh: number | null; longest: YearAct } | null;
+  snow?: { days: number; vertical_m: number; distance_km: number; places: string[]; top_speed_kmh: number | null } | null;
+  sleep?: { nights: number; score: number | null; hours: number | null; hrv: number | null; rhr: number | null;
+    previous: { nights: number; score: number | null; hours: number | null; hrv: number | null; rhr: number | null } | null;
+    best_month: { month: number; score: number } | null; worst_month: { month: number; score: number } | null } | null;
+  fitness?: { total_load: number; peak_fitness: number; peak_day: string; start_fitness: number; end_fitness: number; weekly: number[] } | null;
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
@@ -90,6 +113,7 @@ export const api = {
   sleep: () => get<Sleep>("/api/sleep"),
   forecast: () => get<Forecast>("/api/forecast"),
   trainingLoad: () => get<TrainingLoad>("/api/training-load"),
+  yearReview: (year?: number) => get<YearReview>(year ? `/api/year-review?year=${year}` : "/api/year-review"),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
   syncNow: async () => {
     const r = await fetch("/api/sync", { method: "POST" });

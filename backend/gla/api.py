@@ -1,6 +1,7 @@
 """HTTP API: library, sync, analytics for every view, and the web app itself."""
 from __future__ import annotations
 
+import os
 import threading
 
 from fastapi import FastAPI, HTTPException
@@ -13,7 +14,10 @@ from .sync import ApiSync, SyncBusy, SyncFailed, sync_status
 
 settings = load_settings()
 sessions = session_factory(make_engine(settings))
-app = FastAPI(title="Garmin Lifetime Analyzer", version=__version__)
+# GLA_API_DOCS=false hides /docs and /openapi.json, for example when the app is hosted
+_docs = os.environ.get("GLA_API_DOCS", "true").lower() not in ("0", "false", "no")
+app = FastAPI(title="Garmin Lifetime Analyzer", version=__version__,
+              docs_url="/docs" if _docs else None, redoc_url=None, openapi_url="/openapi.json" if _docs else None)
 
 
 @app.get("/api/health")
@@ -183,6 +187,22 @@ def get_forecast() -> dict:
     """Tonight's sleep score and HRV forecast, and the starting point for the fitness planner."""
     with sessions() as s:
         return q.forecast(s, settings.timezone, _today())
+
+
+# ------------------------------------------------------------------ milestone 6
+@app.get("/api/year-review")
+def get_year_review(year: int | None = None) -> dict:
+    """One year on one page. Without a year: the latest full year."""
+    from .analytics import review as rv
+    today = _today()
+    with sessions() as s:
+        years = rv.available_years(s)
+        y = year if year is not None else rv.default_year(years, today)
+        if y is None:
+            return {"year": None, "years": []}
+        if y not in years:
+            raise HTTPException(404, f"No activities in {y}")
+        return rv.year_review(s, y, today)
 
 
 # ------------------------------------------------------------------ the web app (milestone 4)
