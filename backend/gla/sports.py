@@ -45,10 +45,17 @@ _DIRECT = {
 }
 
 
+# Racket sports Garmin files under "tennis" with a sub-sport (FIT sub_sport numbers 84 to 97). Not tennis.
+_OTHER_RACKET = {"pickleball", "padel", "squash", "badminton", "racquetball", "table_tennis",
+                 "84", "85", "94", "95", "96", "97"}
+
+
 def normalize_sport(sport: str | None, sub_sport: str | None = None) -> str:
     """Return one of SPORTS. Sub-sport wins where it is more specific (running + trail = trail)."""
     s = (str(sport) if sport is not None else "").lower()
     sub = (str(sub_sport) if sub_sport is not None else "").lower()
+    if s in ("tennis", "racket") and sub in _OTHER_RACKET or s in _OTHER_RACKET:
+        return "other"
     if s == "running" and sub == "trail":
         return "trail"
     if sub in _DIRECT and _DIRECT[sub] in ("trail", "snow"):

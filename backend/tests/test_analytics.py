@@ -98,12 +98,6 @@ def add_copy(sessions, src_id: int, days_later: int, shift_deg: float = 0.0, min
         return a.id
 
 
-@pytest.fixture
-def analyzed(settings, sessions, export_zip):
-    ExportImporter(settings, sessions).run(export_zip)        # runs the analysis at the end
-    return settings, sessions
-
-
 def test_pipeline_metrics(analyzed):
     settings, sessions = analyzed
     with sessions() as s:

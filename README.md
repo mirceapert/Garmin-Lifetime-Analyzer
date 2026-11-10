@@ -4,7 +4,7 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Status: milestone 4 of 6, first views.** The app imports your Garmin history, keeps itself up to date every day, and shows it in your browser: lifetime totals, the heatmap with explorer tiles, your repeated routes and your best efforts. Tennis, snowboarding, sleep and forecasts come in milestone 5.
+**Status: milestone 5 of 6.** The app imports your Garmin history, keeps itself up to date every day, and shows it in your browser: lifetime totals, the heatmap with explorer tiles, repeated routes, best efforts, tennis court coverage, snowboard seasons, sleep and recovery, and forecasts. Year in Review comes in milestone 6.
 
 ## What you need
 
@@ -132,6 +132,10 @@ Then open **http://localhost:8000** in your browser. The app is reachable only f
 | Heatmap & tiles | Every GPS track on a map, sport layers, explorer tiles and your largest square, shortcuts to the places you're active |
 | Routes | Routes you repeat, how your pace changed on each, and a name you choose |
 | Best efforts | Fastest 1 km, 5 km, 10 km and half marathon, and how each record moved over time |
+| Tennis | Court coverage per year folded into one half court, zones, a sortable session list, and each session on its own (`#tennis-260`) with heart rate and speed per minute |
+| Snowboard | Seasons with days on snow, runs, vertical, top speed, and the days of each season |
+| Sleep & recovery | Sleep score, HRV, resting heart rate and sleep time over the years, what goes with your better and worse nights, and how many nights you need after a hard session |
+| Forecasts | Tonight's sleep score and HRV, and a planner for your fitness and form on a day you pick |
 
 The header shows when the last sync ran and has a **Sync now** button. API key warnings appear under it from 7 days before the key expires. Every tab has its own link (for example `http://localhost:8000/#routes-25`), so you can bookmark a route.
 
@@ -153,8 +157,14 @@ What it computes:
 - **Explorer tiles**: every zoom-14 map square your GPS tracks crossed (tennis excluded), your largest fully covered square and largest cluster.
 - **Repeated routes**: tracks of the same kind (runs with trail runs, walks, rides) that start within 400 m, are within 12% in length and stay within 140 m on average become one route. A route shows once you have done it 3 times. Routes keep their ID and the name you give them when new activities arrive.
 - **Names**: activity names that arrived garbled from Garmin ("ReprizÄ") are repaired.
+- **Sport groups**: table tennis, padel, squash and the other racket sports Garmin files under tennis move to Other.
+- **Tennis courts**: the courts you play on are found from the GPS of all your sessions together (the net is where both ends mirror each other), then every session is folded into one half court seen from your baseline, right side = forehand. Zones: near the net (under 5 m), mid court, baseline (beyond 10.5 m). Breaks of more than 45 s standing still are left out. Wrist GPS is good to a few metres, so the zones are tendencies.
+- **Snowboard**: a season runs July to June; several recordings on one day are one day on snow. Vertical is Garmin's descent. Runs are counted from altitude (a descent of 30 m or more that ends at a lift), only where the altitude has almost no gaps. Top speed is Garmin's, or the per-second speed smoothed over 5 s where Garmin left it out.
+- **Sleep drivers** (computed when you open the tab): nights after a hard day, a rest day, a late workout, tennis, a run, a weekend, a late bedtime, a short night or high fatigue, compared with the nights without, each against your level in the two months around it. Shown with a 95% range, and only with 20 nights or more on each side.
+- **Recovery**: night HRV and resting heart rate in the 4 nights after your hardest sessions (top 15% load), against your median of the 7 nights before. Per year from 8 sessions.
+- **Tonight's forecast**: a small linear model trained on your own nights each time you open the tab, with its accuracy against simply guessing your 7-night average.
 
-The results are in the API, ready for the views in milestone 4 (open http://localhost:8000/docs to try them):
+The results are in the API (open http://localhost:8000/docs to try them):
 
 | Endpoint | What |
 | --- | --- |
@@ -167,6 +177,26 @@ The results are in the API, ready for the views in milestone 4 (open http://loca
 | `PATCH /api/routes/{id}` | Rename a route, body `{"name": "Bega loop"}` |
 | `GET /api/training-load` | Daily load, fitness, fatigue and form |
 | `GET /api/health-days` | Sleep score, sleep time, night HRV and resting heart rate per day |
+| `GET /api/tennis`, `GET /api/tennis/{id}` | Tennis sessions, coverage per year, courts; one session in detail |
+| `GET /api/snow` | Snowboard seasons and their days |
+| `GET /api/sleep` | Nightly series, sleep drivers, recovery after hard sessions |
+| `GET /api/forecast` | Tonight's sleep score and HRV, and the starting point of the fitness planner |
+
+## What to check (milestone 5 review)
+
+After updating, rebuild and run the analysis once in full, because tennis and snowboard metrics are new:
+
+```powershell
+docker compose up -d --build
+docker compose run --rm app gla analyze --full
+```
+
+- Tennis: your 3 "Table Tennis" activities are gone from the list (they are under Other on the Lifetime tab now). Your 2026 sessions are found on a different court from 2024 and 2025 (two of them on a third one). The heatmap's bright areas sit behind the baseline and near the net posts.
+- Tennis: open a session from the list, step with Previous and Next, and check heart rate per minute against Garmin Connect. Copy the address (`#tennis-…`) into a new tab: it opens the same session.
+- Snowboard: 6 seasons, the days on snow per season match your trips; 2021/22 and 2022/23 show "–" for runs (the watch lost altitude), with vertical still there.
+- Sleep & recovery: the drivers make sense to you (tennis evenings and late nights are the obvious ones to look for). Night HRV is shown from September 2025 only, because Garmin has it from then.
+- Forecasts: tonight's numbers are plausible; move the planner's target day, level and easier days, and see form on the target day change. Reload: your planner settings are still there.
+- Everything reads well at phone width, in light and dark.
 
 ## What to check (milestone 4 review)
 
@@ -237,6 +267,6 @@ The full requirements and design are in the project's design doc. Milestones:
 1. Foundation and import
 2. Live sync from the Garmin Personal API
 3. Analytics on real data
-4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts (this one)
-5. Tennis, Snowboard, Sleep and recovery, Forecasts
+4. First views: Lifetime, Heatmap and tiles, Routes, Best efforts
+5. Tennis, Snowboard, Sleep and recovery, Forecasts (this one)
 6. Year in Review, setup guide and hosting checklist

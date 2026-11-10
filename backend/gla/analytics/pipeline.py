@@ -9,6 +9,7 @@ import statistics
 from collections import Counter
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -17,14 +18,18 @@ from ..config import Settings
 from ..geo import decode_polyline, encode_polyline
 from ..ingest import now
 from ..text import fix_text
-from ..models import Activity, DailyHealth, DerivedMetric, Route, RouteMember, Setting, Tile, Track
+from ..models import (Activity, DailyHealth, DerivedMetric, Route, RouteMember, Setting, TennisCourt, TennisSession,
+                      Tile, Track)
+from ..sports import regroup_activities
 from . import best_efforts as be
 from . import load as ld
 from . import routes as rt
+from . import snow as sn
+from . import tennis as tn
 from . import tiles as tl
 
 log = logging.getLogger(__name__)
-ANALYSIS_VERSION = f"{ld.METHOD}+{be.METHOD}"
+ANALYSIS_VERSION = f"{ld.METHOD}+{be.METHOD}+{sn.METHOD}"
 BEST_EFFORT_SPORTS = ("run", "trail")
 NO_TILE_SPORTS = ("tennis",)          # a court is not exploring
 
@@ -47,6 +52,7 @@ def hr_profile(s: Session) -> tuple[float, float] | None:
 
 def analyze(settings: Settings, s: Session, full: bool = False) -> dict:
     counts: Counter[str] = Counter()
+    counts["activities_regrouped"] = regroup_activities(s)
     for a in s.scalars(select(Activity)):
         fixed = fix_text(a.name)
         if fixed != a.name:
@@ -55,6 +61,7 @@ def analyze(settings: Settings, s: Session, full: bool = False) -> dict:
     _activity_metrics(settings, s, full, counts)
     _routes(s, full, counts)
     _tiles(s, counts)
+    _tennis(settings, s, counts)
     s.flush()
     return dict(counts)
 
@@ -88,6 +95,9 @@ def _activity_metrics(settings: Settings, s: Session, full: bool, counts: Counte
             # GPS only: treadmill distance comes from wrist motion and makes impossible records
             for k, v in be.best_efforts(streams).items():
                 metrics[k] = (v, be.METHOD)
+        if a.sport == "snow":
+            for k, v in sn.activity_metrics(streams, a.max_speed_ms).items():
+                metrics[k] = (v, sn.METHOD)
         for k, (v, method) in metrics.items():
             s.add(DerivedMetric(activity_id=a.id, metric=k, value=v, method=method))
         counts["activities_analyzed"] += 1
@@ -158,3 +168,39 @@ def _tiles(s: Session, counts: Counter) -> None:
     for (x, y), (day, aid) in first.items():
         s.add(Tile(x=x, y=y, first_day=day, first_activity_id=aid, visits=visits[(x, y)]))
     counts["tiles"] = len(first)
+
+
+# ------------------------------------------------------------------ tennis courts
+
+def _tennis(settings: Settings, s: Session, counts: Counter) -> None:
+    """All tennis sessions together, because a court is found from all the sessions played on it."""
+    acts = s.scalars(select(Activity).where(Activity.sport == "tennis", Activity.has_gps.is_(True),
+                                            Activity.has_streams.is_(True)).order_by(Activity.start_utc)).all()
+    streams, fits = {}, []
+    for a in acts:
+        path = settings.streams_dir / f"{a.id}.parquet"
+        if not path.exists():
+            continue
+        streams[a.id] = pd.read_parquet(path)
+        f = tn.fit_session(a.id, streams[a.id])
+        if f is not None:
+            fits.append(f)
+    courts, member = tn.find_courts(fits)
+    s.execute(delete(TennisSession))
+    s.execute(delete(TennisCourt))
+    rows = []
+    for c in courts:
+        row = TennisCourt(lat=round(c.lat, 7), lon=round(c.lon, 7), angle_deg=round(float(np.degrees(c.angle)), 1),
+                          sessions=len(c.sessions))
+        s.add(row)
+        rows.append(row)
+    s.flush()
+    max_speed = {a.id: a.max_speed_ms for a in acts}
+    for f in fits:
+        if f.activity_id not in member:
+            continue
+        i = member[f.activity_id]
+        cov = tn.coverage(f, courts[i], streams[f.activity_id], max_speed.get(f.activity_id))
+        s.add(TennisSession(activity_id=f.activity_id, court_id=rows[i].id, method=tn.METHOD, **cov))
+        counts["tennis_sessions"] += 1
+    counts["tennis_courts"] = len(courts)

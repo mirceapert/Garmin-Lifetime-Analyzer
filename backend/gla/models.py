@@ -161,3 +161,31 @@ class Tile(Base):
     first_day: Mapped[date] = mapped_column(Date)
     first_activity_id: Mapped[int] = mapped_column(Integer)
     visits: Mapped[int] = mapped_column(Integer)
+
+
+class TennisCourt(Base):
+    """A court you have played on, found from the GPS of your sessions. Rebuilt on every analysis."""
+    __tablename__ = "tennis_courts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lat: Mapped[float] = mapped_column(Float)                     # centre of the net
+    lon: Mapped[float] = mapped_column(Float)
+    angle_deg: Mapped[float] = mapped_column(Float)               # long axis, degrees anticlockwise from east
+    sessions: Mapped[int] = mapped_column(Integer)
+
+
+class TennisSession(Base):
+    """Court coverage of one tennis session, folded into one half court (see analytics/tennis.py)."""
+    __tablename__ = "tennis_sessions"
+
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activities.id"), primary_key=True)
+    court_id: Mapped[int] = mapped_column(ForeignKey("tennis_courts.id"))
+    grid: Mapped[list] = mapped_column(JSON)                      # seconds per 1 m cell, depth rows x lateral columns
+    play_s: Mapped[float] = mapped_column(Float)
+    net_share: Mapped[float] = mapped_column(Float)
+    mid_share: Mapped[float] = mapped_column(Float)
+    base_share: Mapped[float] = mapped_column(Float)
+    right_share: Mapped[float] = mapped_column(Float)
+    median_depth_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top_speed_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    method: Mapped[str] = mapped_column(String(16))
