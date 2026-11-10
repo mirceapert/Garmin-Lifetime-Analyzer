@@ -8,18 +8,28 @@ import { cssVar } from "../lib/theme";
 import { useChart } from "../lib/useChart";
 import { useData } from "../lib/useData";
 
-// Dark base map in both themes: the tracks glow on a night ground. Tiles: CARTO, data: OpenStreetMap.
-const BASE: StyleSpecification = {
+// Dark base map in both themes: the tracks glow on a night ground.
+// OpenFreeMap: free vector tiles from OpenStreetMap data, no API key or account needed.
+const MAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
+// If OpenFreeMap can't be reached, fall back to the standard OpenStreetMap tiles, darkened.
+const FALLBACK_STYLE: StyleSpecification = {
   version: 8,
   sources: {
-    base: {
+    osm: {
       type: "raster", tileSize: 256, maxzoom: 19,
-      tiles: ["a", "b", "c", "d"].map(s => `https://${s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png`),
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     },
   },
-  layers: [{ id: "base", type: "raster", source: "base", paint: { "raster-opacity": 0.9 } }],
+  layers: [
+    { id: "ground", type: "background", paint: { "background-color": "#0a1016" } },
+    { id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": -0.85, "raster-brightness-max": 0.32, "raster-contrast": 0.15 } },
+  ],
 };
+const STYLE_TIMEOUT_MS = 10_000;
+
+/** Id of the first label layer, so tracks draw above roads but under place names. */
+const firstLabel = (map: maplibregl.Map) => map.getStyle().layers.find(l => l.type === "symbol")?.id;
 
 interface Area { label: string; count: number; bounds: LngLatBoundsLike }
 
@@ -73,12 +83,22 @@ export function MapView({ scheme }: { scheme: string }) {
   // create the map once
   useEffect(() => {
     if (!box.current) return;
-    const map = new maplibregl.Map({ container: box.current, style: BASE, center: [21.23, 45.75], zoom: 11, attributionControl: { compact: true } });
+    const map = new maplibregl.Map({ container: box.current, style: MAP_STYLE, center: [21.23, 45.75], zoom: 11, attributionControl: { compact: true } });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
-    map.on("load", () => setReady(true));
+    let settled = false;
+    const fallback = () => {
+      if (settled) return;
+      settled = true;
+      map.setStyle(FALLBACK_STYLE);
+      map.once("styledata", () => setReady(true));
+    };
+    map.on("load", () => { settled = true; setReady(true); });
+    // the style itself failed (not a single tile): use the fallback map
+    map.on("error", e => { if (!settled && !("sourceId" in e)) fallback(); });
+    const timer = setTimeout(fallback, STYLE_TIMEOUT_MS);
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => { clearTimeout(timer); map.remove(); mapRef.current = null; };
   }, []);
 
   // tracks layer
@@ -96,7 +116,7 @@ export function MapView({ scheme }: { scheme: string }) {
       map.addSource("tracks", { type: "geojson", data: fc });
       map.addLayer({ id: "tracks", type: "line", source: "tracks", layout: { "line-join": "round", "line-cap": "round" },
         paint: { "line-color": color, "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.55, 14, 0.4],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 12, 1.6, 16, 3] } });
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 12, 1.6, 16, 3] } }, firstLabel(map));
     }
     if (areas[0]) map.fitBounds(areas[0].bounds, { padding: 30, duration: 0 });
   }, [ready, tracks, areas, scheme]);
@@ -113,9 +133,10 @@ export function MapView({ scheme }: { scheme: string }) {
     if (!map.getSource("tiles")) {
       map.addSource("tiles", { type: "geojson", data: fc });
       map.addSource("square", { type: "geojson", data: square });
-      map.addLayer({ id: "tiles-fill", type: "fill", source: "tiles", paint: { "fill-color": "#9085e9", "fill-opacity": ["case", ["get", "cluster"], 0.28, 0.12] } }, map.getLayer("tracks") ? "tracks" : undefined);
-      map.addLayer({ id: "tiles-line", type: "line", source: "tiles", paint: { "line-color": "#9085e9", "line-opacity": 0.35, "line-width": 0.6 } }, map.getLayer("tracks") ? "tracks" : undefined);
-      map.addLayer({ id: "square", type: "line", source: "square", paint: { "line-color": "#c9c2ff", "line-width": 2, "line-dasharray": [3, 2] } });
+      const below = map.getLayer("tracks") ? "tracks" : firstLabel(map);
+      map.addLayer({ id: "tiles-fill", type: "fill", source: "tiles", paint: { "fill-color": "#9085e9", "fill-opacity": ["case", ["get", "cluster"], 0.28, 0.12] } }, below);
+      map.addLayer({ id: "tiles-line", type: "line", source: "tiles", paint: { "line-color": "#9085e9", "line-opacity": 0.35, "line-width": 0.6 } }, below);
+      map.addLayer({ id: "square", type: "line", source: "square", paint: { "line-color": "#c9c2ff", "line-width": 2, "line-dasharray": [3, 2] } }, firstLabel(map));
     }
   }, [ready, tiles]);
 
@@ -167,8 +188,9 @@ function TileStats({ tiles }: { tiles: Tiles }) {
   const ref = useChart(() => ({
     type: "bar",
     data: { labels: years, datasets: [{ data: years.map(y => tiles.per_year[y]), backgroundColor: cssVar("--accent"), borderRadius: 4, maxBarThickness: 24 }] },
-    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: it => ` ${it.parsed.y} new tiles` } } },
-      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { maxTicksLimit: 4 }, grid: { color: cssVar("--line-2") } } } },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => years[it[0].dataIndex], label: it => ` ${it.parsed.y} new tiles` } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, callback: (_v, i) => `'${years[i].slice(2)}` } },
+        y: { beginAtZero: true, ticks: { maxTicksLimit: 4 }, grid: { color: cssVar("--line-2") } } } },
   }), [tiles]);
   return (
     <>

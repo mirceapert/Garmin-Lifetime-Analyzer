@@ -65,7 +65,8 @@ nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--
 /* layout */
 .view { display: grid; gap: 22px }
 .view-head { display: grid; gap: 6px }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; display: grid; gap: 14px; align-content: start }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start }
+.panel > * { min-width: 0 }
 .panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px }
 .grid-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px }

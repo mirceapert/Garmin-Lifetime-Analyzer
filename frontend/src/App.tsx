@@ -42,7 +42,7 @@ export function App() {
         {current === "routes" && <Routes key={key} selected={param ? Number(param) : null} />}
         {current === "best-efforts" && <BestEfforts key={key} />}
       </main>
-      <footer>Data from your Garmin account, stored on this computer. Map © OpenStreetMap contributors © CARTO.</footer>
+      <footer>Data from your Garmin account, stored on this computer. Map: OpenFreeMap © OpenMapTiles, data © OpenStreetMap contributors.</footer>
     </div>
   );
 }
