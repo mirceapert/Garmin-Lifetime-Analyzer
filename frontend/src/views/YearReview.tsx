@@ -5,6 +5,7 @@ import { cssVar } from "../lib/theme";
 import { useChart } from "../lib/useChart";
 import { useData } from "../lib/useData";
 import { routeTitle } from "./Routes";
+import { ShareImage } from "./ShareImage";
 
 const YearMap = lazy(() => import("./YearMap"));
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -37,8 +38,11 @@ export function YearReview({ selected }: { selected: number | null }) {
         <h2 className="review-title">{r.year}{r.partial ? " so far" : ""}</h2>
         <p className="muted">{r.partial ? `Up to ${fmtDay(r.through)}. ` : ""}{t.activities} activities on {t.active_days} days{r.first && r.last ? `, from ${fmtShort(r.first.date)} to ${fmtShort(r.last.date)}` : ""}.</p>
       </div>
-      <div className="seg yearpick" role="group" aria-label="Year">
-        {r.years.map(y => <a key={y} href={`#year-${y}`} role="button" aria-pressed={y === r.year}>{y}</a>)}
+      <div className="yearbar">
+        <div className="seg yearpick" role="group" aria-label="Year">
+          {r.years.map(y => <a key={y} href={`#year-${y}`} role="button" aria-pressed={y === r.year}>{y}</a>)}
+        </div>
+        {t.activities > 0 && <button className="btn" onClick={() => document.getElementById("share")?.scrollIntoView({ behavior: "smooth" })}>Share image ↓</button>}
       </div>
       {!t.activities ? <p className="empty">Nothing recorded in {r.year}.</p> : <>
         <Headline t={t} p={p} />
@@ -52,6 +56,7 @@ export function YearReview({ selected }: { selected: number | null }) {
         <Explore r={r} />
         <Sports r={r} />
         {r.sleep && <SleepYear r={r} />}
+        <ShareImage review={r} />
       </>}
     </section>
   );

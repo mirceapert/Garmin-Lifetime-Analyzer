@@ -88,6 +88,21 @@ export interface YearReview {
   fitness?: { total_load: number; peak_fitness: number; peak_day: string; start_fitness: number; end_fitness: number; weekly: number[] } | null;
 }
 
+// home
+export interface Home {
+  empty: boolean; health_days: number;
+  lifetime?: { activities: number; first_day: string; active_days: number; foot_km: number; earth_share: number; hours: number; ascent_m: number };
+  tiles?: { visited: number; largest_square: number }; routes?: number;
+  best_effort?: { activity_id: number; date: string; seconds: number; name: string | null; distance: string } | null;
+  tennis?: { sessions: number; hours: number; with_court: number } | null;
+  snow?: { seasons: number; days_on_snow: number; vertical_m: number; distance_km: number; top_speed_kmh: number | null } | null;
+  recovery?: { metric: "hrv" | "rhr"; back_by: number | null; sessions: number; night1: number | null } | null;
+  tonight?: Record<string, { ready: boolean; label: string; unit: string; prediction?: number; band?: number; night_of?: string }>;
+  fitness?: { fitness: number; fatigue: number; form: number; peak_fitness: { day: string; value: number } } | null;
+  year?: { year: number; hours: number; active_days: number; activities: number };
+  latest?: { activity_id: number; date: string; sport: string; name: string | null; distance_km: number; seconds: number; has_gps: boolean; base_share: number | null; best_ever: string[] }[];
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
@@ -113,6 +128,7 @@ export const api = {
   sleep: () => get<Sleep>("/api/sleep"),
   forecast: () => get<Forecast>("/api/forecast"),
   trainingLoad: () => get<TrainingLoad>("/api/training-load"),
+  home: () => get<Home>("/api/home"),
   yearReview: (year?: number) => get<YearReview>(year ? `/api/year-review?year=${year}` : "/api/year-review"),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
   syncNow: async () => {

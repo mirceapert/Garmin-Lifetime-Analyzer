@@ -74,3 +74,25 @@ def test_year_review_endpoint(analyzed, monkeypatch):
     assert r["tiles"]["new"] > 0 and r["first"]["date"] == "2024-01-20"
     assert c.get("/api/year-review?year=2019").json()["totals"]["activities"] == 1
     assert c.get("/api/year-review?year=2001").status_code == 404
+
+
+def test_home_endpoint(analyzed, monkeypatch):
+    settings, _ = analyzed
+    monkeypatch.setenv("GLA_DATA_DIR", str(settings.data_dir))
+    monkeypatch.setenv("GLA_DATABASE_URL", settings.database_url)
+    import gla.api
+    api = importlib.reload(gla.api)
+    h = TestClient(api.app).get("/api/home").json()
+    assert h["empty"] is False and h["lifetime"]["activities"] == 7
+    assert h["tiles"]["visited"] > 0 and h["tennis"]["sessions"] == 1 and h["snow"]["days_on_snow"] == 1
+    assert h["year"]["year"] == 2024 and len(h["latest"]) == 5
+    assert h["latest"][0]["date"] >= h["latest"][-1]["date"]
+    assert set(h["tonight"]) == {"sleep_score", "hrv"} and h["tonight"]["sleep_score"]["ready"] is False
+
+
+def test_home_before_any_import(settings, monkeypatch):
+    monkeypatch.setenv("GLA_DATA_DIR", str(settings.data_dir))
+    monkeypatch.setenv("GLA_DATABASE_URL", settings.database_url)
+    import gla.api
+    api = importlib.reload(gla.api)
+    assert TestClient(api.app).get("/api/home").json() == {"empty": True, "health_days": 0}

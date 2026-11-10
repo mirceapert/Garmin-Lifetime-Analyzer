@@ -9,12 +9,14 @@ import { Snow } from "./views/Snow";
 import { Sleep } from "./views/Sleep";
 import { Forecasts } from "./views/Forecasts";
 import { YearReview } from "./views/YearReview";
+import { Home } from "./views/Home";
 import { useColorScheme } from "./lib/theme";
 
 // the map library is large: load it only when the map tab opens
 const MapView = lazy(() => import("./views/MapView").then(m => ({ default: m.MapView })));
 
 const TABS = [
+  { id: "home", label: "Home" },
   { id: "lifetime", label: "Lifetime" },
   { id: "map", label: "Heatmap & tiles" },
   { id: "routes", label: "Routes" },
@@ -31,7 +33,7 @@ export function App() {
   const scheme = useColorScheme();
   const [version, setVersion] = useState(0);              // bumps after a sync, so views reload their data
   const synced = useCallback(() => setVersion(v => v + 1), []);
-  const current = TABS.some(t => t.id === view) ? view : "lifetime";
+  const current = TABS.some(t => t.id === view) ? view : "home";
   const key = `${scheme}-${version}`;
   // on a phone the tab rail scrolls: keep the open tab in sight
   useEffect(() => { document.querySelector('nav.tabs a[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [current]);
@@ -49,6 +51,7 @@ export function App() {
         {TABS.map(t => <a key={t.id} href={`#${t.id}`} aria-current={t.id === current ? "page" : undefined}>{t.label}</a>)}
       </nav>
       <main>
+        {current === "home" && <Home key={key} />}
         {current === "lifetime" && <Lifetime key={key} />}
         {current === "map" && <Suspense fallback={<p className="empty">Loading the map…</p>}><MapView key={key} scheme={scheme} /></Suspense>}
         {current === "routes" && <Routes key={key} selected={param ? Number(param) : null} />}
