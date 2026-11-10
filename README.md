@@ -4,7 +4,7 @@ A personal web app that turns your whole Garmin history into lifetime analysis: 
 
 It runs on your own computer. Your data and your Garmin key never leave it, except for calls to Garmin.
 
-**Version 1.1.** All six milestones are built, plus a Home tab and a shareable Year in Review image.
+**Version 1.2.** All six milestones are built, plus a Home tab, a shareable Year in Review image, and a way to run without Docker.
 
 - **[Setup guide](docs/setup-guide.md)**: from nothing to your history in the browser, everyday use, updates, backups and troubleshooting.
 - **[Hosting checklist](docs/hosting-checklist.md)**: what to do before the app is reachable from anywhere but your computer.
@@ -23,6 +23,8 @@ docker compose run --rm app gla sync
 ```
 
 Open http://localhost:8000. The [setup guide](docs/setup-guide.md) explains each step.
+
+**Without Docker** (Python 3.12+ and Node.js 20+): put your `.env` (and a copied `data` folder, if you have one) here, then double-click `start.cmd` on Windows or run `./start.sh` on macOS and Linux. It sets itself up on the first run and starts the app and the daily sync. See [Without Docker](docs/setup-guide.md#without-docker).
 
 ## Using the app
 
@@ -93,21 +95,21 @@ The results are in the API (open http://localhost:8000/docs to try them):
 | `GET /api/home` | One number per view for the Home tab, tonight's forecast, the latest activities |
 | `GET /api/year-review?year=2025` | One year on one page; without `year`, the latest full year |
 
-## What to check (version 1.1 review)
+## What to check (without Docker)
+
+On the second PC, with Python 3.12+, Node.js 20+ and Git installed:
 
 ```powershell
-git checkout -- .
-git fetch origin
-git checkout home-share-public-page
-docker compose up -d --build
+git clone https://github.com/mirceapert/Garmin-Lifetime-Analyzer.git
+cd Garmin-Lifetime-Analyzer
+git checkout run-without-docker
 ```
 
-Reload the page with Ctrl+F5.
-
-- http://localhost:8000 opens on Home. The numbers match the tabs they link to, and each tile opens its tab.
-- Tonight's card shows the same forecast as the Forecasts tab, and the Garmin key line matches `gla status`.
-- Year in review, bottom of the page: the share image for 2025 looks right in Night and Day; your name appears when you type it; Download image saves a PNG. Try 2024 and 2026 too.
-- Open `docs\index.html` in your browser (double-click it): the project page reads well on a wide window and a narrow one, and the links go to the right places on GitHub.
+- Copy `data` and `.env` from the first PC into this folder (stop it there first with `docker compose down`).
+- Double-click `start.cmd`. The first run sets up `.venv` and builds the web page, then says to open http://localhost:8000. Your history is there.
+- A minimized "gla" window runs the daily sync; Ctrl+C in the main window closes both.
+- In a second PowerShell window in the folder: `.\.venv\Scripts\gla status` shows the key as ok, so `.env` was read.
+- On the first PC, Docker still works as before: `docker compose up -d --build`.
 
 ## Where things are
 

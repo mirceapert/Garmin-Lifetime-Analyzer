@@ -127,6 +127,13 @@ def _cmd_analyze(args) -> int:
     return 0
 
 
+def _cmd_serve(args) -> int:
+    import uvicorn
+    print(f"Garmin Lifetime Analyzer: open http://localhost:{args.port}  (Ctrl+C stops it)")
+    uvicorn.run("gla.api:app", host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="fitparse")
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -145,10 +152,14 @@ def main(argv: list[str] | None = None) -> int:
     pst = sub.add_parser("status", help="last sync, next sync and API key warnings")
     pst.add_argument("--json", action="store_true")
     pst.set_defaults(func=_cmd_status)
-    pw = sub.add_parser("worker", help="run the daily sync schedule (used by the worker container)")
+    pw = sub.add_parser("worker", help="run the daily sync schedule (the worker container, or start.ps1 without Docker)")
     pw.set_defaults(func=_cmd_worker)
     prg = sub.add_parser("regroup", help="re-apply the sport groups to all stored activities")
     prg.set_defaults(func=_cmd_regroup)
+    pv = sub.add_parser("serve", help="run the web app without Docker")
+    pv.add_argument("--port", type=int, default=8000)
+    pv.add_argument("--host", default="127.0.0.1", help="127.0.0.1 (default) keeps it reachable only from this computer")
+    pv.set_defaults(func=_cmd_serve)
     pa = sub.add_parser("analyze", help="compute training load, best efforts, routes and tiles")
     pa.add_argument("--full", action="store_true", help="recompute everything, not only new activities")
     pa.set_defaults(func=_cmd_analyze)

@@ -2,6 +2,8 @@
 
 From nothing to your whole Garmin history in the browser. Written for Windows; the macOS and Linux commands are the same in a terminal, except where noted.
 
+Docker is the recommended way. On a computer without Docker, see [Without Docker](#without-docker) at the end.
+
 Plan on about an hour of your time, plus the wait for Garmin's export.
 
 ## 1. What you need
@@ -139,6 +141,51 @@ If `git checkout` or `git pull` refuses because files have changed and you didn'
 Back up the whole `data` folder and `.env` (for example to an external drive). Everything the app shows can be rebuilt from `data\raw` with `gla analyze --full`; route names live in the database.
 
 To move to another computer: install Docker, clone the repository, copy `data` and `.env` across, and run `docker compose up -d --build`.
+
+## Without Docker
+
+The app also runs straight on Windows, macOS or Linux, for example on a second computer. You need:
+
+- **Python 3.12 or newer** (python.org; on Windows tick "Add python.exe to PATH" in the installer)
+- **Node.js 20 or newer** (nodejs.org), used once to build the web page
+- **Git** (git-scm.com)
+
+1. Get the code:
+
+   ```powershell
+   git clone https://github.com/mirceapert/Garmin-Lifetime-Analyzer.git
+   cd Garmin-Lifetime-Analyzer
+   ```
+
+2. Bring your data. Either copy the `data` folder and `.env` from the computer that already has them into this folder (stop the app there first, `docker compose down`, so the database is copied whole), or start fresh: `copy .env.example .env`, fill in the key as in step 5, and put the export zip in an `import` folder.
+
+3. Start it. On Windows double-click **`start.cmd`** (or run `.\start.cmd` in PowerShell); on macOS and Linux run `./start.sh`.
+
+   The first start creates a Python environment in `.venv`, installs the app and builds the web page, which takes a few minutes. Later starts take seconds. Then open http://localhost:8000. The daily sync runs alongside in a small minimized window; closing the app (Ctrl+C) stops both.
+
+4. Starting fresh? Import once the app is set up, in a second window in the same folder:
+
+   ```powershell
+   .\.venv\Scripts\gla import
+   .\.venv\Scripts\gla sync
+   ```
+
+   On macOS and Linux it's `.venv/bin/gla`.
+
+The `gla` commands are the same as with Docker, without `docker compose run --rm app` in front: `.\.venv\Scripts\gla status`, `gla analyze --full` and so on. Run them from the `Garmin-Lifetime-Analyzer` folder: the app finds `.env`, `data` and `import` in the folder you start it from.
+
+| To | Run |
+| --- | --- |
+| Start | `start.cmd` (Windows) or `./start.sh` |
+| Start without the daily sync | `start.cmd -NoSync` or `./start.sh --no-sync` |
+| Use another port | `start.cmd -Port 8010` or `PORT=8010 ./start.sh` |
+| Update to a new version | `start.cmd -Update` or `./start.sh --update` (pulls, reinstalls, rebuilds, re-analyzes) |
+
+Good to know:
+
+- The sync runs only while the app runs. If the computer was off at `GLA_SYNC_TIME`, the sync runs as soon as you start the app that day. **Sync now** works as always.
+- Two computers each keep their own copy and sync on their own; nothing is shared between them. The same Garmin key works on both.
+- If PowerShell says running scripts is disabled, use `start.cmd`, which starts `start.ps1` for this one run without changing any settings.
 
 ## Troubleshooting
 

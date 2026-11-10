@@ -57,3 +57,29 @@ def test_read_fit_without_gps():
     assert f.sport == "run"
     assert not f.has_gps
     assert f.gps_points == []
+
+
+def test_env_file_is_read_without_overriding(tmp_path, monkeypatch):
+    from gla.config import load_env_file, load_settings
+    env = tmp_path / "my.env"
+    env.write_text('﻿# comment\nGARMIN_API_KEY="abc 123"\nexport TZ=Europe/Bucharest\nGLA_SYNC_TIME=07:15  # morning\n'
+                   'GARMIN_API_KEY_EXPIRES=\nnot a setting\n', encoding="utf-8")
+    monkeypatch.delenv("GARMIN_API_KEY", raising=False)
+    monkeypatch.delenv("GLA_SYNC_TIME", raising=False)
+    monkeypatch.delenv("GARMIN_API_KEY_EXPIRES", raising=False)
+    monkeypatch.setenv("TZ", "UTC")                       # already set: the shell wins
+    monkeypatch.setenv("GLA_ENV_FILE", str(env))
+    monkeypatch.setenv("GLA_DATA_DIR", str(tmp_path / "data"))
+    s = load_settings()
+    assert s.garmin_api_key == "abc 123" and s.timezone == "UTC"
+    assert (s.sync_time.hour, s.sync_time.minute) == (7, 15) and s.garmin_api_key_expires is None
+    load_env_file(tmp_path / "missing.env")               # no file: nothing happens
+
+
+def test_serve_command_is_wired(monkeypatch):
+    import uvicorn
+    from gla import cli
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(app=app, **kw))
+    assert cli.main(["serve", "--port", "8010"]) == 0
+    assert seen["app"] == "gla.api:app" and seen["port"] == 8010 and seen["host"] == "127.0.0.1"
