@@ -1,6 +1,6 @@
 [project]
 name = "gla"
-version = "1.1.0"
+version = "1.2.0"
 description = "Garmin Lifetime Analyzer: lifetime analysis of your own Garmin history"
 requires-python = ">=3.12"
 dependencies = [

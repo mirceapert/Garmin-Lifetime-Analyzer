@@ -46,7 +46,34 @@ class Settings:
             d.mkdir(parents=True, exist_ok=True)
 
 
+def load_env_file(path: Path | None = None) -> None:
+    """Read KEY=value lines from .env (in the current folder, or GLA_ENV_FILE) into the environment.
+
+    Docker Compose does this itself; without Docker the app does it. Variables already set win, so a
+    value set in the shell or by Docker is never overridden.
+    """
+    p = path or Path(os.environ.get("GLA_ENV_FILE", ".env"))
+    if not p.is_file():
+        return
+    for raw in p.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[7:].strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        elif " #" in value:                              # KEY=value  # comment
+            value = value.split(" #", 1)[0].rstrip()
+        if key:
+            os.environ.setdefault(key, value)
+
+
 def load_settings() -> Settings:
+    load_env_file()
     data_dir = Path(os.environ.get("GLA_DATA_DIR", "data")).resolve()
     import_dir = Path(os.environ.get("GLA_IMPORT_DIR", "import")).resolve()
     database_url = os.environ.get("GLA_DATABASE_URL", f"sqlite:///{data_dir / 'gla.sqlite'}")
