@@ -24,6 +24,47 @@ export interface SyncStatus {
   warnings: { level: "info" | "warning" | "critical"; text: string }[];
 }
 
+// milestone 5
+export interface CourtGeometry { cell_m: number; depth_m: number; half_width_m: number; baseline_m: number; service_m: number; singles_half_m: number; doubles_half_m: number; net_zone_m: number; base_zone_m: number }
+export interface TennisRow {
+  activity_id: number; date: string; start: string; name: string | null; minutes: number; distance_km: number;
+  avg_hr: number | null; max_hr: number | null; calories: number | null; load: number | null; has_gps: boolean; court_id: number | null;
+  play_min?: number; net_share?: number; mid_share?: number; base_share?: number; right_share?: number; median_depth_m?: number | null; top_speed_kmh?: number | null;
+}
+export interface TennisYear { sessions: number; with_gps: number; hours: number; grid: number[][] | null; net_share: number | null; mid_share: number | null; base_share: number | null; right_share: number | null; top_speed_kmh: number | null }
+export interface Court { id: number; lat: number; lon: number; angle_deg: number; sessions: number }
+export interface Tennis { sessions: TennisRow[]; years: Record<string, TennisYear>; courts: Court[]; geometry: CourtGeometry }
+export interface TennisSession extends TennisRow {
+  grid: number[][] | null; geometry: CourtGeometry; court: Court | null; per_minute: [number, number | null, number | null][];
+  prev_id: number | null; next_id: number | null; number: number; of: number;
+}
+export interface SnowDay { day: string; places: string[]; activities: number[]; distance_km: number; vertical_m: number; hours: number; runs: number | null; top_speed_kmh: number | null }
+export interface SnowSeason { season: string; places: string[]; days_on_snow: number; distance_km: number; vertical_m: number; hours: number; runs: number | null; runs_partial: number | null; top_speed_kmh: number | null; best_day_vertical_m: number; days: SnowDay[] }
+export interface Snow { seasons: SnowSeason[]; totals: { seasons: number; days_on_snow: number; vertical_m: number; distance_km: number; top_speed_kmh: number | null } }
+export type OutcomeKey = "sleep_score" | "hrv" | "rhr" | "sleep_h";
+export interface Driver { key: string; label: string; nights: number; compared: number; diff: number; lo: number; hi: number; clear: boolean }
+export interface Outcome { label: string; unit: string; better: "higher" | "lower"; nights: number; since?: string; baseline: number | null; drivers: Driver[]; hidden: { key: string; label: string; nights: number }[] }
+export interface RecoveryNight { night: number; mean: number; lo: number; hi: number; n: number }
+export interface RecoveryCurve { sessions: number; nights: (RecoveryNight | null)[]; back_by: number | null }
+export interface Sleep {
+  series: [string, number | null, number | null, number | null, number | null, number | null, number | null][];
+  drivers: Record<OutcomeKey, Outcome>;
+  recovery: { hard_load?: number; hard_sessions?: number; clean_sessions?: number; metrics: Partial<Record<"hrv" | "rhr", { label: string; unit: string; better: string; overall: RecoveryCurve; years: Record<string, RecoveryCurve> }>> };
+  min_nights: number; min_sessions_year: number;
+}
+export interface Tonight {
+  key: string; label: string; unit: string; better: string; ready: boolean; nights?: number; needed?: number;
+  night_of?: string; wake_day?: string; prediction?: number; band?: number; average?: number; mae?: number; mae_baseline?: number;
+  test_nights?: number; train_nights?: number; contributions?: { feature: string; label: string; value: number; effect: number }[];
+  recent?: [string, number, number][];
+}
+export interface LoadPlan {
+  ready: boolean; day: string; fitness: number; fatigue: number; form: number; load_today: number; weekday_pattern: number[];
+  weekly_loads: number[]; weekly_average: number; fitness_days: number; fatigue_days: number; peak_fitness: { day: string; value: number };
+}
+export interface Forecast { tonight: Record<string, Tonight>; plan: LoadPlan }
+export interface TrainingLoad { days: [string, number, number, number, number][]; hr_profile: { rest: number; max: number } | null }
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
@@ -43,6 +84,12 @@ export const api = {
     if (!r.ok) throw new Error(await r.text());
     return r.json() as Promise<{ id: number; name: string | null }>;
   },
+  tennis: () => get<Tennis>("/api/tennis"),
+  tennisSession: (id: number) => get<TennisSession>(`/api/tennis/${id}`),
+  snow: () => get<Snow>("/api/snow"),
+  sleep: () => get<Sleep>("/api/sleep"),
+  forecast: () => get<Forecast>("/api/forecast"),
+  trainingLoad: () => get<TrainingLoad>("/api/training-load"),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
   syncNow: async () => {
     const r = await fetch("/api/sync", { method: "POST" });
