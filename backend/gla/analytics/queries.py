@@ -7,9 +7,13 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Activity, DailyHealth, DerivedMetric, Route, RouteMember, Tile, Track
+from ..models import Activity, DailyHealth, DerivedMetric, Route, RouteMember, TennisCourt, TennisSession, Tile, Track
 from ..sports import SPORT_COLORS, SPORTS
+from . import forecast as fc
 from . import load as ld
+from . import sleep as sl
+from . import snow as sn
+from . import tennis as tn
 from . import tiles as tl
 from .best_efforts import DISTANCES
 from .pipeline import hr_profile
@@ -171,3 +175,122 @@ def tracks(s: Session) -> list[dict]:
 def health_days(s: Session) -> list[list]:
     return [[d.day.isoformat(), d.sleep_score, d.sleep_s, d.hrv_night_ms, d.resting_hr]
             for d in s.scalars(select(DailyHealth).order_by(DailyHealth.day))]
+
+
+# ------------------------------------------------------------------ tennis (milestone 5)
+
+def _metric(s: Session, ids: list[int], metric: str) -> dict[int, float]:
+    if not ids:
+        return {}
+    return dict(s.execute(select(DerivedMetric.activity_id, DerivedMetric.value)
+                          .where(DerivedMetric.metric == metric, DerivedMetric.activity_id.in_(ids))).all())
+
+
+def _tennis_row(a: Activity, ts: TennisSession | None, load: float | None) -> dict:
+    r = {"activity_id": a.id, "date": local_day(a).isoformat(), "start": a.start_local.strftime("%H:%M"), "name": a.name,
+         "minutes": round((a.timer_s or a.elapsed_s or 0) / 60), "distance_km": round((a.distance_m or 0) / 1000, 2),
+         "avg_hr": a.avg_hr, "max_hr": a.max_hr, "calories": a.calories, "load": round(load) if load else None,
+         "has_gps": bool(a.has_gps), "court_id": None}
+    if ts is not None:
+        r.update({"court_id": ts.court_id, "play_min": round(ts.play_s / 60), "net_share": ts.net_share,
+                  "mid_share": ts.mid_share, "base_share": ts.base_share, "right_share": ts.right_share,
+                  "median_depth_m": ts.median_depth_m,
+                  "top_speed_kmh": round(ts.top_speed_ms * 3.6, 1) if ts.top_speed_ms else None})
+    return r
+
+
+def _geometry() -> dict:
+    return {"cell_m": tn.CELL_M, "depth_m": tn.DEPTH_M, "half_width_m": tn.HALF_W_M, "baseline_m": tn.BASELINE_M,
+            "service_m": tn.SERVICE_M, "singles_half_m": tn.SINGLES_HALF_M, "doubles_half_m": tn.DOUBLES_HALF_M,
+            "net_zone_m": tn.NET_ZONE_M, "base_zone_m": tn.BASE_ZONE_M}
+
+
+def tennis(s: Session) -> dict:
+    acts = s.scalars(select(Activity).where(Activity.sport == "tennis").order_by(Activity.start_utc)).all()
+    sess = {t.activity_id: t for t in s.scalars(select(TennisSession))}
+    loads = _metric(s, [a.id for a in acts], "load")
+    rows = [_tennis_row(a, sess.get(a.id), loads.get(a.id)) for a in acts]
+    years: dict[str, dict] = {}
+    for a, r in zip(acts, rows):
+        y = years.setdefault(r["date"][:4], {"sessions": 0, "with_gps": 0, "hours": 0.0, "grid": None, "play_s": 0.0,
+                                             "net": 0.0, "mid": 0.0, "base": 0.0, "right": 0.0, "top_speed_kmh": None})
+        y["sessions"] += 1
+        y["hours"] += r["minutes"] / 60
+        t = sess.get(a.id)
+        if t is None:
+            continue
+        y["with_gps"] += 1
+        g = t.grid
+        y["grid"] = g if y["grid"] is None else [[p + q for p, q in zip(r1, r2)] for r1, r2 in zip(y["grid"], g)]
+        y["play_s"] += t.play_s
+        for k, v in (("net", t.net_share), ("mid", t.mid_share), ("base", t.base_share), ("right", t.right_share)):
+            y[k] += v * t.play_s
+        if r.get("top_speed_kmh"):
+            y["top_speed_kmh"] = max(y["top_speed_kmh"] or 0, r["top_speed_kmh"])
+    for y in years.values():
+        w = y.pop("play_s") or 1
+        for k in ("net", "mid", "base", "right"):
+            v = y.pop(k)
+            y[f"{k}_share"] = round(v / w, 3) if y["with_gps"] else None
+        y["hours"] = round(y["hours"], 1)
+        if y["grid"] is not None:
+            y["grid"] = [[round(v, 1) for v in row] for row in y["grid"]]
+    courts = [{"id": c.id, "lat": c.lat, "lon": c.lon, "angle_deg": c.angle_deg, "sessions": c.sessions}
+              for c in s.scalars(select(TennisCourt))]
+    return {"sessions": rows, "years": dict(sorted(years.items())), "courts": courts, "geometry": _geometry()}
+
+
+def tennis_session(settings, s: Session, activity_id: int) -> dict | None:
+    a = s.get(Activity, activity_id)
+    if a is None or a.sport != "tennis":
+        return None
+    t = s.get(TennisSession, activity_id)
+    load = _metric(s, [a.id], "load").get(a.id)
+    out = _tennis_row(a, t, load)
+    out["grid"] = t.grid if t else None
+    out["geometry"] = _geometry()
+    out["court"] = None
+    if t:
+        c = s.get(TennisCourt, t.court_id)
+        out["court"] = {"id": c.id, "lat": c.lat, "lon": c.lon, "angle_deg": c.angle_deg, "sessions": c.sessions}
+    out["per_minute"] = []
+    path = settings.streams_dir / f"{a.id}.parquet"
+    if a.has_streams and path.exists():
+        import pandas as pd
+        out["per_minute"] = tn.per_minute(pd.read_parquet(path))
+    ids = [r for r in s.scalars(select(Activity.id).where(Activity.sport == "tennis").order_by(Activity.start_utc))]
+    i = ids.index(a.id)
+    out["prev_id"] = ids[i - 1] if i > 0 else None
+    out["next_id"] = ids[i + 1] if i + 1 < len(ids) else None
+    out["number"], out["of"] = i + 1, len(ids)
+    return out
+
+
+# ------------------------------------------------------------------ snowboard (milestone 5)
+
+def snow(s: Session) -> dict:
+    acts = s.scalars(select(Activity).where(Activity.sport == "snow").order_by(Activity.start_utc)).all()
+    ids = [a.id for a in acts]
+    top, runs = _metric(s, ids, "snow_top_speed"), _metric(s, ids, "snow_runs")
+    rows = [{"activity_id": a.id, "day": local_day(a), "name": a.name, "distance_m": a.distance_m,
+             "descent_m": a.descent_m, "hours": (a.elapsed_s or a.timer_s or 0) / 3600,   # lifts included
+             "top_speed_ms": top.get(a.id), "runs": int(runs[a.id]) if a.id in runs else None} for a in acts]
+    return sn.seasons(rows)
+
+
+# ------------------------------------------------------------------ sleep, recovery, forecasts (milestone 5)
+
+def sleep(s: Session, tz: str, today: date) -> dict:
+    df = sl.day_frame(s, tz, today)
+    if df.empty:
+        return {"series": [], "drivers": {}, "recovery": {"metrics": {}}}
+    return {"series": sl.daily_series(df), "drivers": sl.drivers(sl.nights(df)),
+            "recovery": sl.recovery(df, sl.activity_loads(s)), "min_nights": sl.MIN_NIGHTS,
+            "min_sessions_year": sl.MIN_SESSIONS_YEAR}
+
+
+def forecast(s: Session, tz: str, today: date) -> dict:
+    df = sl.day_frame(s, tz, today)
+    if df.empty:
+        return {"tonight": {}, "plan": {"ready": False}}
+    return {"tonight": {k: fc.tonight(df, k, today) for k in fc.TARGETS}, "plan": fc.load_plan(df, today)}

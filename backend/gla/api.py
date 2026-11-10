@@ -1,4 +1,4 @@
-"""HTTP API. Milestones 1 and 2: health, library report, sync status and Sync now. Views arrive in milestones 4 and 5."""
+"""HTTP API: library, sync, analytics for every view, and the web app itself."""
 from __future__ import annotations
 
 import threading
@@ -140,6 +140,49 @@ def get_health_days() -> list[list]:
     """[day, sleep score, sleep seconds, night HRV, resting HR] per day."""
     with sessions() as s:
         return q.health_days(s)
+
+
+# ------------------------------------------------------------------ milestone 5
+def _today():
+    return _dt.now(ZoneInfo(settings.timezone)).date()
+
+
+@app.get("/api/tennis")
+def get_tennis() -> dict:
+    """Every tennis session with its court coverage, coverage per year, and the courts found."""
+    with sessions() as s:
+        return q.tennis(s)
+
+
+@app.get("/api/tennis/{activity_id}")
+def get_tennis_session(activity_id: int) -> dict:
+    """One session: folded court grid, zones, heart rate and speed per minute, previous and next session."""
+    with sessions() as s:
+        r = q.tennis_session(settings, s, activity_id)
+    if r is None:
+        raise HTTPException(404, "No such tennis session")
+    return r
+
+
+@app.get("/api/snow")
+def get_snow() -> dict:
+    """Snowboard seasons with days on snow, runs, vertical and top speed."""
+    with sessions() as s:
+        return q.snow(s)
+
+
+@app.get("/api/sleep")
+def get_sleep() -> dict:
+    """Nightly series, sleep drivers and recovery after hard sessions."""
+    with sessions() as s:
+        return q.sleep(s, settings.timezone, _today())
+
+
+@app.get("/api/forecast")
+def get_forecast() -> dict:
+    """Tonight's sleep score and HRV forecast, and the starting point for the fitness planner."""
+    with sessions() as s:
+        return q.forecast(s, settings.timezone, _today())
 
 
 # ------------------------------------------------------------------ the web app (milestone 4)

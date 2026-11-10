@@ -122,6 +122,8 @@ def _cmd_analyze(args) -> int:
     rep = run_analysis(settings, sessions, full=args.full)
     print(f"{rep.get('activities_analyzed', 0)} activities analyzed, {rep.get('routes_created', 0)} new routes, "
           f"{rep.get('tiles', 0)} explorer tiles, {rep.get('names_fixed', 0)} names fixed.")
+    print(f"Tennis: {rep.get('tennis_sessions', 0)} sessions with court coverage on {rep.get('tennis_courts', 0)} courts. "
+          f"{rep.get('activities_regrouped', 0)} activities moved to another sport.")
     return 0
 
 

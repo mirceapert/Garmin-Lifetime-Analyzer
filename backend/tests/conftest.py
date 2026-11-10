@@ -27,3 +27,10 @@ def sessions(settings):
 @pytest.fixture
 def export_zip(tmp_path: Path) -> Path:
     return build_export(tmp_path)
+
+
+@pytest.fixture
+def analyzed(settings, sessions, export_zip):
+    from gla.importer.export import ExportImporter
+    ExportImporter(settings, sessions).run(export_zip)        # runs the analysis at the end
+    return settings, sessions
